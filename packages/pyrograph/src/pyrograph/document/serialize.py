@@ -56,13 +56,14 @@ def _svg_element(obj: DocumentObject, line_width_mm: float) -> ET.Element:
             },
         )
     else:
+        paint = {"fill": "#000000", "stroke": "none"} if obj.fill else _STROKE
         element = ET.Element(
             f"{{{SVG_NS}}}path",
             {
                 "id": obj.id,
                 "d": obj.local_path().to_svg_d(),
                 "stroke-width": repr(obj.stroke_width_mm or line_width_mm),
-                **_STROKE,
+                **paint,
             },
         )
     if not obj.transform.is_identity:
@@ -91,7 +92,7 @@ def _build_svg(document: Document) -> bytes:
 
 
 def _object_json(obj: DocumentObject) -> dict:
-    entry = {"id": obj.id, "name": obj.name, "locked": obj.locked}
+    entry = {"id": obj.id, "name": obj.name, "locked": obj.locked, "fill": obj.fill}
     if obj.stroke_width_mm is not None:
         entry["stroke_width_mm"] = obj.stroke_width_mm
     if isinstance(obj, ImageObject):
@@ -142,6 +143,7 @@ def _read_object(entry: dict, element: ET.Element, archive: zipfile.ZipFile) -> 
         "locked": entry.get("locked", False),
         "transform": transform,
         "stroke_width_mm": entry.get("stroke_width_mm"),
+        "fill": entry.get("fill", False),
     }
     kind = entry["type"]
     if kind == "image":

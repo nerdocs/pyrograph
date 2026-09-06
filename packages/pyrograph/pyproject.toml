@@ -12,6 +12,8 @@ dependencies = [
     "numpy>=1.26",
     "pillow>=10.0",
     "fonttools>=4.50",
+    "segno>=1.6",
+    "python-barcode>=0.15",
 ]
 
 [project.scripts]

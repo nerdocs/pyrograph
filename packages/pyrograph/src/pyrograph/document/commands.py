@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from .document import Document
+from .geometry import Transform
 from .layer import LaserParams
 from .objects import DocumentObject
 
@@ -97,6 +98,49 @@ class RemoveObject(Command):
     def undo(self, document: Document) -> None:
         li, oi = self._position
         document.layers[li].objects.insert(oi, self._obj)
+
+
+@dataclass
+class TransformObject(Command):
+    """Move, scale, rotate or mirror an object by applying ``transform`` on top of its own.
+
+    The stroke width scales with the geometry. Without that, enlarging a motif turns a solid outline into a
+    hairline — the geometry grows, the ink does not.
+    """
+
+    object_id: str
+    transform: Transform
+    _previous: tuple[Transform, float | None] | None = field(default=None, init=False)
+
+    def do(self, document: Document) -> None:
+        obj = document.object(self.object_id)
+        self._previous = (obj.transform, obj.stroke_width_mm)
+        obj.transform = obj.transform.then(self.transform)
+        if obj.stroke_width_mm is not None:
+            obj.stroke_width_mm *= self.transform.scale_factor
+
+    def undo(self, document: Document) -> None:
+        obj = document.object(self.object_id)
+        obj.transform, obj.stroke_width_mm = self._previous
+
+
+@dataclass
+class CommandGroup(Command):
+    """Several changes that undo as one step.
+
+    Moving a selection of three objects is one edit to whoever made it, and pressing undo three times to
+    take it back is not what anybody means.
+    """
+
+    commands: list[Command]
+
+    def do(self, document: Document) -> None:
+        for command in self.commands:
+            command.do(document)
+
+    def undo(self, document: Document) -> None:
+        for command in reversed(self.commands):
+            command.undo(document)
 
 
 @dataclass

@@ -17,8 +17,8 @@ abstraction is designed so other engravers can be added.
 
 The driver's read path is verified on real hardware over both USB and Bluetooth; engraving works over both.
 The application has a document model, SVG import, job creation, a device abstraction and a command line —
-SVG to engraved workpiece runs end to end. `pyrograph-gui` opens a window that shows a document and
-engraves it; editing objects on the canvas is not implemented yet.
+SVG to engraved workpiece runs end to end. `pyrograph-gui` opens an editor: draw and place objects,
+generate QR codes and barcodes, arrange them on the bed and engrave.
 
 Developing without an engraver: both CLIs take `--mock`, which drives a device that only exists in memory.
 

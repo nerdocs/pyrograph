@@ -31,6 +31,9 @@ class LayerPanel(QWidget):
     changed = Signal()
     """A layer was edited — the document needs redrawing and the window needs marking dirty."""
 
+    current_changed = Signal(int)
+    """Another layer was selected. New objects go into it."""
+
     def __init__(self) -> None:
         super().__init__()
         self._document: Document | None = None
@@ -39,6 +42,7 @@ class LayerPanel(QWidget):
 
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._show_params)
+        self._list.currentRowChanged.connect(self.current_changed)
         self._list.itemChanged.connect(self._toggle_visible)
 
         self.power = QSpinBox(minimum=1, maximum=100, suffix=" %")

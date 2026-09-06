@@ -36,3 +36,11 @@
 - The raster covers the stroked ink instead of the bare path, so wide outlines are no longer clipped.
 - Round joints and caps when stroking, so icon dots drawn as zero-length segments survive.
 - GUI (`pyrograph-gui`): work-area canvas, layer panel with laser parameters, device panel on a worker thread.
+- Canvas tools: select, move, scale by handle, rubber band, line, rectangle, ellipse, polyline, polygon.
+- `TransformObject` and `CommandGroup`: a transform scales the stroke with it, a multi-object edit undoes as one.
+- Filled paths (`DocumentObject.fill`), even-odd, so glyph counters and QR modules come out right.
+- QR code and barcode generators producing filled geometry, not bitmaps (`pyrograph.codes`).
+- Text tool with a family picker; the font file behind a family name is resolved by scanning the font dirs.
+- Clipboard (cut/copy/paste), delete, select all, and a toolbar above the canvas.
+- Align, distribute, mirror, rotate by 90° and duplicate as an n×m array.
+- Millimetre rulers, a configurable grid, and snapping to the grid and to object edges.

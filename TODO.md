@@ -38,13 +38,13 @@
   file to work against. Layout of both is in `docs/document-model.md`.
 - SVG import handles shapes, arcs, nested transforms, units and fill/stroke inheritance; `text`, `use`,
   clipping, masks and gradients are skipped and reported. Rounded rectangle corners are ignored.
-- **No scale/move operations.** An imported icon is a few millimetres wide and there is no command to
-  resize it — only the editor will bring that.
+- **SVG `fill` is not imported.** The model can fill an area now (`DocumentObject.fill`), but the importer
+  still turns every shape into an outline. A filled logo therefore comes in hollow.
 - No DXF import.
 - `stroke-linecap` and `stroke-linejoin` are not read; the rasteriser always draws them round. The
   difference to a butt cap is half a line width, and round is what keeps icon dots alive.
-- **Scaling must scale `stroke_width_mm` with the geometry.** There is no scale operation yet, so every
-  caller does it by hand — the first one that forgets gets a hairline on a large motif.
+- Filling uses the even-odd rule for every object; SVG's `fill-rule: nonzero` is not honoured. It differs
+  only where a path overlaps itself.
 - **No spooler.** `LaserDevice.run()` blocks until the job is handed over and the caller polls
   `status()`. A queue with priorities (`docs/architecture.md`) is only worth building once the GUI
   needs to stay responsive.
@@ -54,17 +54,27 @@
 
 ## GUI (`pyrograph-gui`)
 
-- First slice done: canvas, layer panel with laser parameters, device panel on a worker thread
-  (`docs/gui.md`). Headless tests run on Qt's `offscreen` platform.
-- **No object editing.** The canvas is read-only — no selection, no move, no scale, no rotate. That needs
-  the missing model commands first (see "No scale/move operations" above).
+- Done: canvas with tools (select/move/scale, line, rectangle, ellipse, polyline, polygon, text, QR,
+  barcode), clipboard, align/distribute/mirror/rotate/array, rulers, grid and snapping, layer panel,
+  device panel on a worker thread (`docs/gui.md`). Headless tests run on Qt's `offscreen` platform.
+- **No rotation from the canvas.** Only the menu's 90° steps; there is no rotation handle and no free
+  angle. `Transform.rotate` is there, the interaction is not.
+- **No node editing** — a path's points cannot be moved once it is drawn. Together with grouping, the
+  biggest thing still missing from "editor".
 - **Import replaces the document** instead of merging into the open one. Also drops the undo history.
-- Objects are drawn but not named or listed; there is no object tree next to the layer list.
+- Objects are drawn but not listed; there is no object tree next to the layer list, and an object's name
+  is only visible in the file.
 - No layer management: layers cannot be added, renamed, reordered or deleted, and objects cannot be
   moved between them, so `MoveObject` has no GUI at all.
+- No properties panel: an object's exact position and size can only be dragged, not typed in.
 - Frame runs at power 1, hard-coded. No focus/Z control, no rotary UI, no device settings dialog —
   the declarative settings from `docs/architecture.md` are not built.
 - Engraving hands the worker a deep copy; a second job cannot be queued while one runs (no spooler).
 - The device profile is not read by the canvas: the work area comes from the document, so a document
   larger than the machine bed is not flagged.
 - BLE connects by name or address typed by hand; `scan_ble()` exists but there is no scan dialog.
+- The font scan reads every file in the font directories (~2 s on a full desktop) and is only cached for
+  the session. A missing family reports itself, but there is no way to pick a file by hand.
+- Barcodes carry no human-readable digits underneath, and neither generator draws its quiet zone —
+  the clearance has to be kept free by placing the code with room around it.
+- Undo/redo have no visible history, and the window has no "revert to saved".

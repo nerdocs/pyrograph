@@ -13,10 +13,13 @@ import pytest
 pytest.importorskip("PySide6")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
+from PySide6.QtGui import QMouseEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from pyrograph.document import Document, ImageObject, Layer, Path, PathObject  # noqa: E402
+from pyrograph.document import Document, ImageObject, Layer, Path, PathObject, Point  # noqa: E402
+from pyrograph.gui import arrange  # noqa: E402
+from pyrograph.gui.tools import SelectTool, ShapeTool  # noqa: E402
 from pyrograph.gui.window import MainWindow  # noqa: E402
 
 
@@ -96,3 +99,164 @@ def test_engraving_runs_against_the_mock_device(app, window):
 
     panel.close_requested.emit()
     assert _pump(app, lambda: not panel._connected)
+
+
+def _event(view, kind, point_mm, modifiers=Qt.KeyboardModifier.NoModifier):
+    """A mouse event at a position given in document millimetres."""
+    position = QPointF(view.mapFromScene(QPointF(*point_mm)))
+    return QMouseEvent(
+        kind,
+        position,
+        view.viewport().mapToGlobal(position.toPoint()),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        modifiers,
+    )
+
+
+def _drag(view, start_mm, end_mm, modifiers=Qt.KeyboardModifier.NoModifier):
+    view.mousePressEvent(_event(view, QEvent.Type.MouseButtonPress, start_mm, modifiers))
+    view.mouseMoveEvent(_event(view, QEvent.Type.MouseMove, end_mm, modifiers))
+    view.mouseReleaseEvent(_event(view, QEvent.Type.MouseButtonRelease, end_mm, modifiers))
+
+
+@pytest.fixture
+def drawing(app):
+    """A window on an empty 100 × 100 mm document, sized so millimetres map to pixels sensibly."""
+    window = MainWindow()
+    window.resize(1200, 800)
+    window.show()
+    window._set_document(Document(width_mm=100.0, height_mm=100.0), None)
+    app.processEvents()
+    yield window
+    window.device.shutdown()
+
+
+def test_the_rectangle_tool_adds_an_object(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (20, 20), (60, 40))
+
+    objects = drawing.document.layers[0].objects
+    assert len(objects) == 1
+    assert objects[0].bounds().width == pytest.approx(40.0, abs=0.5)
+    assert drawing.dirty
+    drawing.undo()
+    assert not drawing.document.layers[0].objects
+
+
+def test_dragging_an_object_moves_it_and_undoes_as_one_step(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (20, 20), (40, 40))
+    before = drawing.document.layers[0].objects[0].bounds()
+
+    drawing.canvas.set_tool(SelectTool())
+    _drag(drawing.canvas, (30, 30), (50, 30))
+    after = drawing.document.layers[0].objects[0].bounds()
+    assert after.x == pytest.approx(before.x + 20.0, abs=0.5)
+    assert after.y == pytest.approx(before.y, abs=0.5)
+
+    drawing.undo()
+    assert drawing.document.layers[0].objects[0].bounds().x == pytest.approx(before.x)
+
+
+def test_a_handle_scales_the_selection_and_its_stroke(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (20, 20), (40, 40))
+    obj = drawing.document.layers[0].objects[0]
+    obj.stroke_width_mm = 0.4
+    drawing.canvas.set_tool(SelectTool())
+    drawing.canvas.set_selection([obj.id])
+
+    box = drawing.canvas.selection_bounds()
+    _drag(drawing.canvas, (box.right, box.bottom), (box.right + 20, box.bottom + 20))
+    assert obj.bounds().width == pytest.approx(40.0, abs=1.0)
+    assert obj.stroke_width_mm == pytest.approx(0.8, abs=0.05)
+
+
+def test_dragging_the_background_selects_what_it_covers(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (10, 10), (30, 30))
+    _drag(drawing.canvas, (60, 60), (80, 80))
+
+    drawing.canvas.set_tool(SelectTool())
+    _drag(drawing.canvas, (5, 5), (40, 40))
+    assert len(drawing.canvas.selection) == 1
+    _drag(drawing.canvas, (2, 2), (95, 95))
+    assert len(drawing.canvas.selection) == 2
+
+
+def test_copy_and_paste_add_an_offset_duplicate(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (20, 20), (40, 40))
+    original = drawing.document.layers[0].objects[0]
+    drawing.canvas.set_selection([original.id])
+
+    drawing.copy()
+    drawing.paste()
+    objects = drawing.document.layers[0].objects
+    assert len(objects) == 2
+    assert objects[1].id != original.id
+    assert objects[1].bounds().x == pytest.approx(original.bounds().x + 2.0)
+
+    drawing.undo()
+    assert len(drawing.document.layers[0].objects) == 1
+
+
+def test_delete_removes_the_selection_in_one_step(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (10, 10), (30, 30))
+    _drag(drawing.canvas, (60, 60), (80, 80))
+    drawing.canvas.select_all()
+
+    drawing.delete()
+    assert not drawing.document.layers[0].objects
+    drawing.undo()
+    assert len(drawing.document.layers[0].objects) == 2
+
+
+def test_align_moves_everything_onto_one_edge(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (10, 10), (30, 30))
+    _drag(drawing.canvas, (60, 60), (80, 80))
+    drawing.canvas.select_all()
+
+    drawing._align("left")
+    lefts = {round(o.bounds().x, 3) for o in drawing.document.layers[0].objects}
+    assert len(lefts) == 1
+
+
+def test_an_array_copies_into_a_grid(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (10, 10), (20, 20))
+    drawing.canvas.select_all()
+
+    drawing.apply(arrange.array(drawing.document, drawing.canvas.selection, 3, 2, 15.0, 15.0))
+    assert len(drawing.document.layers[0].objects) == 6
+    drawing.undo()
+    assert len(drawing.document.layers[0].objects) == 1
+
+
+def test_snapping_pulls_a_drawn_corner_onto_the_grid(drawing):
+    drawing.canvas.grid_mm = 10.0
+    drawing.canvas.snap_to_grid = True
+    assert drawing.canvas.snap_point(Point(20.4, 39.6)) == Point(20.0, 40.0)
+
+    drawing.canvas.snap_to_grid = False
+    assert drawing.canvas.snap_point(Point(20.4, 39.6)) == Point(20.4, 39.6)
+
+
+def test_the_place_dialogs_hand_back_a_positioned_object(app, monkeypatch):
+    """The dialogs are accepted without a screen, so the wiring from click to object is covered."""
+    from PySide6.QtWidgets import QDialog, QLineEdit
+
+    from pyrograph.gui import dialogs
+
+    # Patch our own dialog class, not QDialog: a C++ slot does not take a Python override reliably.
+    monkeypatch.setattr(dialogs._Dialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    monkeypatch.setattr(QLineEdit, "text", lambda self: "PYRO-1")
+
+    for kind in ("qr", "barcode", "text"):
+        obj = dialogs.ASK[kind](None, Point(12.0, 34.0))
+        assert obj is not None, kind
+        assert obj.fill, kind
+        assert obj.bounds().x == pytest.approx(12.0, abs=1.0), kind

@@ -1,57 +1,109 @@
 # The GUI
 
-Qt Widgets (PySide6), started with `pyrograph-gui [file.pyg]`. The first slice shows a document and runs it
-on a machine; editing objects on the canvas comes later.
+Qt Widgets (PySide6), started with `pyrograph-gui [file.pyg]`.
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│ File   Edit   View                                       │
-├───────────────┬──────────────────────────┬───────────────┤
-│ Layers        │                          │ Connection    │
-│ ☑ Outline (2) │      ┌──────────┐        │  Mock / USB   │
-│ ☑ Photo (1)   │      │  motif   │        │  / Bluetooth  │
-│               │      └──────────┘        │ ───────────── │
-│ Laser params  │        work area         │ Job           │
-│  power, depth │       (grid: 10 mm)      │  ● idle       │
-│  passes,speed │                          │  Frame        │
-│  dpi, line w. │                          │  Engrave      │
-│               │                          │  Pause  Abort │
-└───────────────┴──────────────────────────┴───────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ File  Edit  Modify  View                                             │
+│ Open Save │ Cut Copy Paste Delete │ Undo Redo │ Frame Engrave        │
+├───┬───────────────┬──────────────────────────────┬───────────────────┤
+│ ▶ │ Layers        │  0    20    40    60    80   │ Connection        │
+│ ✋│ ☑ Codes (5)   │ ┌────────────────────────┐   │  Mock / USB / BLE │
+│ ╱ │ ☑ Photo (1)   │0│  ▣▣  ▌▌▌▌▌▌▌▌         │   │ ───────────────── │
+│ ▭ │               │ │                       │   │ Job               │
+│ ○ │ Laser params  │2│  ┌──▫────▫──┐         │   │  ● idle           │
+│ ∿ │  power, depth │0│  ▫  selected ▫        │   │  Frame            │
+│ ⬠ │  passes,speed │ │  └──▫────▫──┘         │   │  Engrave          │
+│ T │  dpi, line w. │4│                       │   │  Pause   Abort    │
+│ ▩ │               │0└────────────────────────┘   │                   │
+│ ▌▌│               │                              │                   │
+├───┴───────────────┴──────────────────────────────┴───────────────────┤
+│                                    24.5  18.0 mm │ 1 selected 40 × 24 mm │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Where things live
 
 | Module | Does |
 | --- | --- |
-| `gui/window.py` | Owns the document and the undo stack; menus, files, dirty state |
-| `gui/canvas.py` | The work area as a `QGraphicsScene`, one scene unit = one millimetre |
-| `gui/layers.py` | Layer list with visibility, laser parameters of the selected layer |
+| `gui/window.py` | Owns the document, the undo stack and the clipboard; menus, toolbars, files |
+| `gui/canvas.py` | The work area as a `QGraphicsScene`, the selection, snapping |
+| `gui/tools.py` | What a press and a drag mean — one class per mouse mode |
+| `gui/rulers.py` | Millimetre scales, and the widget that puts them around the canvas |
+| `gui/layers.py` | Layer stack and the laser parameters of the selected layer |
 | `gui/device.py` | Connecting, framing, engraving — on a worker thread |
+| `gui/arrange.py` | Align, distribute, mirror, rotate, array — each returns a command |
+| `gui/dialogs.py` | Text, QR code, barcode, array |
+| `gui/icons.py` | The tool pictograms, drawn rather than shipped |
+| `gui/fonts.py` | Family name → font file, which Qt does not tell us |
 
-Qt is confined to `pyrograph.gui`. Everything below it (`document`, `job`, `devices`) stays importable
-without a display, which is what keeps the chain scriptable from the CLI and testable without hardware.
+Qt is confined to `pyrograph.gui`. Everything below it (`document`, `job`, `devices`, `codes`) stays
+importable without a display, which is what keeps the chain scriptable from the CLI and testable without
+hardware.
 
-## The canvas
+## One way in
 
-The scene is measured in millimetres, y downwards, exactly like the document model — no conversion, so the
-view's scale is the only zoom factor and a 0.4 mm stroke is drawn 0.4 units wide. Paths keep their Bézier
-curves (`QPainterPath.cubicTo`), and strokes get round caps and joins because that is how the rasteriser
-draws them: what you see is the width that will burn.
+Every change to the document is a `Command` and goes through `MainWindow.apply`. The canvas does not write
+to the model — it emits `edit_requested`, and the window executes, redraws and marks the file unsaved in
+one place. A canvas and a layer list that each edit the model on their own is how the two start disagreeing
+about what is in the file.
 
-The scene is rebuilt wholesale after every change. For the object counts an engraving document has that is
-cheap, and it leaves no view state that could drift away from the model.
+That is also why a drag is *previewed* rather than applied: while the mouse is down, the Qt items are moved
+about; on release, one `CommandGroup` describes the whole thing. Moving three objects is one undo step.
 
-Mouse: wheel zooms, drag pans, `Ctrl+0` fits the work area.
+## Tools
 
-## Editing
+| Tool | What it does |
+| --- | --- |
+| Select | Click to select, Shift-click to add, drag to move, drag a handle to scale, drag the background to rubber-band select. Shift while scaling a corner keeps the proportions |
+| Pan | Drag the view |
+| Line, Rectangle, Ellipse | Drag out the shape |
+| Polyline, Polygon | Click point after point; double-click or Enter finishes, Escape discards |
+| Text | Click, then choose the content, family and height |
+| QR code, Barcode | Click, then enter the content and size |
 
-Every change goes through the undo stack, including layer visibility — a hidden layer is not engraved, so
-hiding one is an edit, not a view setting. Parameter edits are applied when a field loses focus or Enter is
-pressed, so typing "60" leaves one undo step behind instead of two.
+Adding a tool is a class in `gui/tools.py` and one line in `build_tools()` — the canvas has no branch per
+tool. A tool only receives millimetres and asks the canvas for a preview, a ghost outline or an edit.
 
-The window applies the change, redraws and marks the document unsaved in one place; panels never write to
-the document themselves. A canvas and a layer list that each edit the model on their own is how the two
-start disagreeing about what is in the file.
+## Scaling scales the stroke
+
+A `TransformObject` multiplies the object's own `stroke_width_mm` by the transform's scale factor. Without
+that, enlarging a motif turns a solid outline into a hairline: the geometry grows, the ink does not.
+Objects that leave their width to the layer keep leaving it to the layer.
+
+## Snapping
+
+Snapping pulls to whatever is closer, within six screen pixels: the drawn grid, or another object's left,
+centre and right edge (top, middle, bottom vertically). Both can be switched off in the View menu, and the
+grid spacing is the same number that is drawn — what you see is what you snap to.
+
+When a selection is dragged, it is the selection's *corner* that snaps, not the pointer: the corner is what
+has to sit on the line, and the pointer grabbed the object somewhere in the middle.
+
+## Filled areas
+
+`DocumentObject.fill` burns the enclosed area instead of the outline, combining subpaths with the even-odd
+rule — that is what puts the hole into an "o" and the light modules into a QR code. A filled object with no
+stroke width of its own is not stroked at all, the same as SVG's `stroke: none`; adding the layer's outline
+to a code would fatten every module by a line width.
+
+The rasteriser draws each subpath in its own bounding box and XORs it into a mask, so a symbol made of four
+hundred small squares does not cost four hundred full-size images.
+
+## Codes
+
+`pyrograph.codes` turns text into a filled path, not a bitmap: a code is rectangles, and keeping it as
+geometry means it stays sharp at any size and any resolution. Adjacent dark modules are merged into runs.
+
+Neither generator draws a quiet zone. A code needs light margin — four module widths for a QR code, ten for
+a barcode — and on a workpiece that margin is simply unburnt material.
+
+## Text needs a file, Qt has none
+
+`TextObject` converts text to outlines with fontTools and therefore needs a font *file*. Neither
+`QFontDatabase` nor `QRawFont` exposes a path, so `gui/fonts.py` scans the platform's font directories once
+and reads each file's family name. The scan is lazy and cached — about a second, and nothing at all until
+the text tool is used. Alias families ("Sans Serif") are resolved through Qt's own matching first.
 
 ## The device, off the GUI thread
 
@@ -70,5 +122,5 @@ An idle device is polled once a second; while a job runs, the wait loop reports 
 
 ## Not there yet
 
-Selecting, moving and scaling objects; a spooler for queued jobs; device settings; merging an import into
-the open document instead of replacing it. See `TODO.md`.
+Node editing, rotation from the canvas, grouping, a spooler, device settings, merging an import into the
+open document. See `TODO.md` for the gaps and `docs/ideas.md` for what could come.

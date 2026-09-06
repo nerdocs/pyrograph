@@ -7,10 +7,12 @@ hardware, and a later GUI change touches nothing below it.
 from .commands import (
     AddObject,
     Command,
+    CommandGroup,
     MoveObject,
     RemoveObject,
     SetLayerParams,
     SetLayerVisible,
+    TransformObject,
     UndoStack,
 )
 from .document import Document
@@ -24,6 +26,7 @@ __all__ = [
     "AddObject",
     "Close",
     "Command",
+    "CommandGroup",
     "CubicTo",
     "Document",
     "DocumentObject",
@@ -44,6 +47,7 @@ __all__ = [
     "SvgImportError",
     "TextObject",
     "Transform",
+    "TransformObject",
     "UndoStack",
     "import_svg",
     "load_pyg",

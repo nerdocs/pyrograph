@@ -4,6 +4,7 @@ import zipfile
 
 from pyrograph.document import (
     AddObject,
+    CommandGroup,
     Document,
     LaserParams,
     Layer,
@@ -12,6 +13,8 @@ from pyrograph.document import (
     PathObject,
     RemoveObject,
     SetLayerParams,
+    Transform,
+    TransformObject,
     UndoStack,
     save_pyg,
 )
@@ -69,3 +72,47 @@ def test_remove_puts_the_object_back_where_it_was(sample_objects):
     stack.execute(RemoveObject("opath"))
     stack.undo()
     assert document.layers[0].objects[0].id == "opath"
+
+
+def test_transform_scales_the_stroke_with_the_geometry(sample_objects):
+    document = Document(layers=[Layer(objects=list(sample_objects))])
+    document.object("opath").stroke_width_mm = 0.4
+    stack = UndoStack(document)
+
+    stack.execute(TransformObject("opath", Transform.scale(2.0)))
+    assert document.object("opath").bounds().width == 20.0
+    assert document.object("opath").stroke_width_mm == 0.8
+
+    stack.undo()
+    assert document.object("opath").bounds().width == 10.0
+    assert document.object("opath").stroke_width_mm == 0.4
+
+
+def test_a_stroke_left_to_the_layer_stays_there(sample_objects):
+    document = Document(layers=[Layer(objects=list(sample_objects))])
+    UndoStack(document).execute(TransformObject("opath", Transform.scale(3.0)))
+    assert document.object("opath").stroke_width_mm is None
+
+
+def test_a_group_undoes_as_one_step(sample_objects):
+    document = Document(layers=[Layer(objects=list(sample_objects))])
+    stack = UndoStack(document)
+    move = Transform.translate(5.0, 0.0)
+
+    stack.execute(CommandGroup([TransformObject("opath", move), TransformObject("oimage", move)]))
+    assert document.object("opath").bounds().x == 5.0
+    assert document.object("oimage").bounds().x == 35.0
+
+    stack.undo()
+    assert document.object("opath").bounds().x == 0.0
+    assert document.object("oimage").bounds().x == 30.0
+    assert not stack.can_undo
+
+
+def test_a_clone_is_a_copy_under_a_new_id(sample_objects):
+    original = sample_objects[0]
+    clone = original.clone()
+    assert clone.id != original.id
+    assert clone.path.segments == original.path.segments
+    clone.path.segments.clear()
+    assert original.path.segments  # deep, not shared

@@ -40,10 +40,43 @@ class RasterJob:
 
 
 def _stroke_width_mm(obj, layer) -> float:
-    """How wide this object burns: its own width if it has one, else the layer's."""
+    """How wide this object burns: its own width if it has one, else the layer's.
+
+    A filled object without a width of its own is not stroked at all — the same as SVG's ``stroke: none``.
+    Adding the layer's outline to a filled shape would fatten every QR module by a line width.
+    """
     if isinstance(obj, ImageObject):
         return 0.0
-    return obj.stroke_width_mm or layer.params.line_width_mm
+    if obj.stroke_width_mm is not None:
+        return obj.stroke_width_mm
+    return 0.0 if obj.fill else layer.params.line_width_mm
+
+
+def _fill_mask(size: tuple[int, int], lines: list[list]) -> "object":
+    """A mask of the area enclosed by ``lines``, combined with the even-odd rule.
+
+    Even-odd is what gives an "o" its hole and a QR code its light modules: a subpath inside another one
+    cuts the area away instead of adding to it. Each subpath is drawn in its own bounding box and XORed
+    into the mask, so a code made of four hundred small squares does not cost four hundred full-size
+    images.
+    """
+    from PIL import Image, ImageChops, ImageDraw
+
+    mask = Image.new("1", size, 0)
+    for line in lines:
+        if len(line) < 3:
+            continue
+        xs = [p.x for p in line]
+        ys = [p.y for p in line]
+        left, top = max(0, int(min(xs)) - 1), max(0, int(min(ys)) - 1)
+        right, bottom = min(size[0], int(max(xs)) + 2), min(size[1], int(max(ys)) + 2)
+        if right <= left or bottom <= top:
+            continue
+        piece = Image.new("1", (right - left, bottom - top), 0)
+        ImageDraw.Draw(piece).polygon([(p.x - left, p.y - top) for p in line], fill=1)
+        box = (left, top, right, bottom)
+        mask.paste(ImageChops.logical_xor(mask.crop(box), piece), box)
+    return mask
 
 
 def _stroke(draw, points: list[tuple[float, float]], width_px: int) -> None:
@@ -112,9 +145,14 @@ def build_raster_job(
             canvas = ImageChops.darker(canvas, placed)
             draw = ImageDraw.Draw(canvas)
         else:
-            stroke_px = max(1, round(_stroke_width_mm(obj, layer) * scale))
-            for line in obj.local_path().transformed(placement).polylines():
-                _stroke(draw, [(p.x, p.y) for p in line], stroke_px)
+            lines = obj.local_path().transformed(placement).polylines()
+            if obj.fill:
+                canvas.paste(0, None, _fill_mask(canvas.size, lines))
+            width_mm = _stroke_width_mm(obj, layer)
+            if width_mm > 0:
+                stroke_px = max(1, round(width_mm * scale))
+                for line in lines:
+                    _stroke(draw, [(p.x, p.y) for p in line], stroke_px)
 
     mono = dither(list(canvas.tobytes()), width_px, height_px, inverse)
     payload = pack_bits(mono, width_px, height_px) if packed else bytes(mono)

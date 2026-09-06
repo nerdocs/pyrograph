@@ -10,6 +10,7 @@ Two rules hold for every object here, and both are easy to violate later:
 
 from __future__ import annotations
 
+import copy
 import uuid
 from dataclasses import dataclass, field
 
@@ -36,6 +37,20 @@ class DocumentObject:
     An SVG carries its own stroke width, and it is part of the drawing: an icon drawn with a heavy stroke
     stays heavy when it is scaled up. Objects that are not stroked — a bitmap — ignore this.
     """
+
+    fill: bool = False
+    """Burn the enclosed area, not just the outline.
+
+    A QR code is nothing but filled squares, and a glyph is a filled shape too. Subpaths are combined with
+    the even-odd rule, which is what puts the hole into an "o". Objects without an outline — a bitmap —
+    ignore this.
+    """
+
+    def clone(self) -> "DocumentObject":
+        """A deep copy under a new identity. What copy/paste and duplicate are made of."""
+        duplicate = copy.deepcopy(self)
+        duplicate.id = new_id()
+        return duplicate
 
     def local_path(self) -> Path:
         """The object's outline in its own coordinate system, before ``transform``."""
@@ -95,6 +110,9 @@ class TextObject(DocumentObject):
     text: str = ""
     font_path: str = ""
     size_mm: float = 10.0
+
+    fill: bool = True
+    """Glyphs are areas, not outlines — engraving only their contour reads as a hollow font."""
 
     def local_path(self) -> Path:
         return self.to_path()

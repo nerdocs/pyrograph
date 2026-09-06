@@ -195,8 +195,8 @@ class DevicePanel(QWidget):
         self.state_dot = QLabel("●")
         self.state_text = QLabel("not connected")
 
-        self.frame_button = QPushButton("Frame", clicked=self._frame)
-        self.engrave_button = QPushButton("Engrave", clicked=self._engrave)
+        self.frame_button = QPushButton("Frame", clicked=self.frame)
+        self.engrave_button = QPushButton("Engrave", clicked=self.engrave)
         self.pause_button = QPushButton("Pause", checkable=True)
         self.pause_button.toggled.connect(self.pause_requested)
         self.abort_button = QPushButton("Abort", clicked=self.abort_requested)
@@ -276,14 +276,16 @@ class DevicePanel(QWidget):
             self.state_text.setText("connecting…")
             self.open_requested.emit(self.mode.currentData(), self.address.text().strip())
 
-    def _frame(self) -> None:
+    def frame(self) -> None:
+        """Trace the document's bounding box so the workpiece can be aligned."""
         bounds = self._document.bounds() if self._document else None
         if bounds is None:
             QMessageBox.information(self, "Frame", "Nothing to frame — the document is empty.")
             return
         self.frame_requested.emit(bounds, 1)
 
-    def _engrave(self) -> None:
+    def engrave(self) -> None:
+        """Send every visible layer to the device."""
         if self._document is None or self._document.bounds() is None:
             QMessageBox.information(self, "Engrave", "Nothing to engrave — the document is empty.")
             return

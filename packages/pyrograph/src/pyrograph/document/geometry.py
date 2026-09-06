@@ -129,6 +129,16 @@ class Transform:
     def is_identity(self) -> bool:
         return self == Transform()
 
+    @property
+    def scale_factor(self) -> float:
+        """How much this transform multiplies lengths by.
+
+        The geometric mean of the two axes, so a non-uniform scale gives one sensible number. Stroke
+        widths are scaled with it: an outline drawn twice as large has to burn twice as wide, or a motif
+        loses its weight the moment it is resized.
+        """
+        return math.sqrt(abs(self.a * self.d - self.b * self.c))
+
     def to_svg(self) -> str:
         return "matrix({})".format(" ".join(_num(v) for v in (self.a, self.b, self.c, self.d, self.e, self.f)))
 
@@ -222,6 +232,34 @@ class Path:
                 Close(),
             ]
         )
+
+    @classmethod
+    def line(cls, x1: float, y1: float, x2: float, y2: float) -> "Path":
+        return cls([MoveTo(Point(x1, y1)), LineTo(Point(x2, y2))])
+
+    @classmethod
+    def ellipse(cls, cx: float, cy: float, rx: float, ry: float) -> "Path":
+        """An ellipse from four cubic Béziers — the usual approximation, good to ~0.02 % of the radius."""
+        k = 0.5522847498307936  # 4/3·(√2−1): the control point distance that fits a quarter circle
+        return cls(
+            [
+                MoveTo(Point(cx + rx, cy)),
+                CubicTo(Point(cx + rx, cy + ry * k), Point(cx + rx * k, cy + ry), Point(cx, cy + ry)),
+                CubicTo(Point(cx - rx * k, cy + ry), Point(cx - rx, cy + ry * k), Point(cx - rx, cy)),
+                CubicTo(Point(cx - rx, cy - ry * k), Point(cx - rx * k, cy - ry), Point(cx, cy - ry)),
+                CubicTo(Point(cx + rx * k, cy - ry), Point(cx + rx, cy - ry * k), Point(cx + rx, cy)),
+                Close(),
+            ]
+        )
+
+    @classmethod
+    def polyline(cls, points: list[Point], close: bool = False) -> "Path":
+        """An open chain of straight segments, or a closed polygon."""
+        segments: list[Segment] = [MoveTo(points[0])]
+        segments += [LineTo(point) for point in points[1:]]
+        if close:
+            segments.append(Close())
+        return cls(segments)
 
     def transformed(self, transform: Transform) -> "Path":
         out: list[Segment] = []
