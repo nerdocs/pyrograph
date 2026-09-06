@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from pyrograph.document import Document, ImageObject, Layer, Path, PathObject, Point  # noqa: E402
 from pyrograph.gui import arrange  # noqa: E402
+from pyrograph.gui.device import DevicePanel  # noqa: E402
 from pyrograph.gui.tools import SelectTool, ShapeTool  # noqa: E402
 from pyrograph.gui.window import MainWindow  # noqa: E402
 
@@ -297,3 +298,44 @@ def test_disconnecting_stops_the_machine_first(app, window):
     assert _pump(app, lambda: not panel._connected)
     assert stopped == [True]
     assert not panel._framing
+
+
+def test_a_plugged_in_engraver_is_offered(app):
+    """Selected, not connected: opening the port stays the user's move."""
+    panel = DevicePanel()
+    ports: list[str] = []
+    panel.watcher._ports = lambda: list(ports)
+    assert panel.mode.currentData() == "mock"
+
+    ports.append("/dev/ttyUSB0")
+    panel.watcher.scan()
+    assert panel.mode.currentData() == "usb"
+    assert panel.address.text() == "/dev/ttyUSB0"
+    assert not panel._connected
+
+    panel.state_text.setText("untouched")
+    panel.watcher.scan()
+    assert panel.state_text.text() == "untouched", "the same port must not report itself twice"
+
+    ports.clear()
+    panel.watcher.scan()
+    ports.append("/dev/ttyACM0")
+    panel.watcher.scan()
+    assert panel.address.text() == "/dev/ttyACM0", "unplugging and replugging reports again"
+    panel.shutdown()
+
+
+def test_a_connection_chosen_by_hand_is_left_alone(app):
+    panel = DevicePanel()
+    ports: list[str] = []
+    panel.watcher._ports = lambda: list(ports)
+
+    panel.mode.setCurrentIndex(panel.mode.findData("ble"))
+    panel.address.setText("LaserPecker-1234")
+    panel._chosen_by_hand()
+
+    ports.append("/dev/ttyUSB0")
+    panel.watcher.scan()
+    assert panel.mode.currentData() == "ble"
+    assert panel.address.text() == "LaserPecker-1234"
+    panel.shutdown()

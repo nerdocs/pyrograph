@@ -97,16 +97,22 @@ class _FrameAssembler:
             self._frames.get_nowait()
 
 
-def list_serial_ports() -> list[str]:
+def list_serial_ports(strict: bool = False) -> list[str]:
     """Serial ports that look like a LaserPecker.
 
     Any WCH bridge counts: the LP2 ships a CH340, newer units a CH9102 — the latter shows up as
     ``/dev/ttyACM*`` via cdc_acm because the in-tree ``ch341`` driver does not claim ``1a86:55d4``.
+
+    ``strict`` drops that fallback and returns only the two product IDs LDS itself filters for. A WCH
+    bridge sits in half the hobby electronics ever made, so anything that offers a port to the user
+    without being asked — autodetection — has to be sure it found an engraver and not an Arduino.
     """
     from serial.tools import list_ports
 
     ports = [p for p in list_ports.comports() if p.vid == WCH_VENDOR]
     known = [p.device for p in ports if p.pid in WCH_PRODUCTS]
+    if strict:
+        return known
     return known or [p.device for p in ports]
 
 

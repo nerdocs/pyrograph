@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 from ..devices import DeviceState, DeviceStatus, LaserPeckerDevice
 from ..document import Document
 from ..job import build_raster_job
+from .discovery import PortWatcher
 
 POLL_MS = 1000
 """How often an idle device is asked how it is doing."""
@@ -222,13 +223,17 @@ class DevicePanel(QWidget):
         self._connected = False
         self._framing = False
         self._busy = False
+        self._picked = False
+        """Whether the connection was chosen by hand. Autodetection then keeps out of the way."""
 
         self.mode = QComboBox()
         for label, value in (("Mock (no hardware)", "mock"), ("USB", "usb"), ("Bluetooth", "ble")):
             self.mode.addItem(label, value)
         self.mode.currentIndexChanged.connect(self._mode_changed)
+        self.mode.activated.connect(self._chosen_by_hand)
         self.address = QLineEdit(placeholderText="auto")
         self.address.setEnabled(False)
+        self.address.textEdited.connect(self._chosen_by_hand)
         self.connect_button = QPushButton("Connect", clicked=self._toggle_connection)
 
         self.state_dot = QLabel("●")
@@ -299,17 +304,38 @@ class DevicePanel(QWidget):
         self._thread.start()
         self._update_buttons()
 
+        self.watcher = PortWatcher(parent=self)
+        self.watcher.appeared.connect(self._port_appeared)
+        self.watcher.start()
+
     def set_document(self, document: Document) -> None:
         self._document = document
 
     def shutdown(self) -> None:
         """Stop the worker thread. The window calls this before it closes."""
+        self.watcher.stop()
         if self._connected:
             self.close_requested.emit()
         self._thread.quit()
         self._thread.wait(5000)
 
     # ------------------------------------------------------------------ user actions
+
+    def _chosen_by_hand(self, *_) -> None:
+        self._picked = True
+
+    def _port_appeared(self, port: str) -> None:
+        """An engraver was plugged in. Offer it, unless the choice has already been made.
+
+        Selecting, not connecting: opening the port is the user's move. Nothing here reaches the machine,
+        and a connection that established itself while somebody was working on another one would be a
+        surprise, not a convenience.
+        """
+        if self._connected or self._picked:
+            return
+        self.mode.setCurrentIndex(self.mode.findData("usb"))
+        self.address.setText(port)
+        self.state_text.setText(f"engraver on {port}")
 
     def _mode_changed(self) -> None:
         mock = self.mode.currentData() == "mock"

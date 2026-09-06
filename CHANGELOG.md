@@ -45,3 +45,4 @@
 - Align, distribute, mirror, rotate by 90° and duplicate as an n×m array.
 - Millimetre rulers, a configurable grid, and snapping to the grid and to object edges.
 - Stop button for framing; the device traces until told to stop, and disconnecting stops it too.
+- An engraver plugged into USB is detected and preselected, by product ID rather than by bridge chip.

@@ -122,6 +122,13 @@ way it happens on the worker thread while the document stays editable.
 
 An idle device is polled once a second; while a job runs, the wait loop reports the state instead.
 
+**Plugging in selects the machine.** The port list is polled every two seconds — reading it is a look at
+the operating system's device table, no traffic on any port — and an engraver that was not there a moment
+ago is put into the connection fields. Only the two USB product IDs LaserPecker ships qualify; the bridge
+chip's vendor alone is not evidence, because the same WCH chip sits in half the hobby electronics ever
+made. It selects, it does not connect: opening the port stays the user's move, and it keeps out of the way
+once the connection has been chosen by hand or established.
+
 **Framing has to be stopped.** Tracing the outline is not a one-shot command — the device repeats it until
 told otherwise, which is the point: the outline stays visible while the workpiece is moved into place. So
 *Frame* is paired with *Stop*, and while it runs everything else is out of reach, because the head is

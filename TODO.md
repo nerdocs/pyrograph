@@ -73,7 +73,9 @@
 - Engraving hands the worker a deep copy; a second job cannot be queued while one runs (no spooler).
 - The device profile is not read by the canvas: the work area comes from the document, so a document
   larger than the machine bed is not flagged.
-- BLE connects by name or address typed by hand; `scan_ble()` exists but there is no scan dialog.
+- BLE connects by name or address typed by hand; `scan_ble()` exists but there is no scan dialog, and
+  autodetection covers USB only.
+- Autodetection only offers the port; there is no setting for connecting to it straight away.
 - The font scan reads every file in the font directories (~2 s on a full desktop) and is only cached for
   the session. A missing family reports itself, but there is no way to pick a file by hand.
 - Barcodes carry no human-readable digits underneath, and neither generator draws its quiet zone —
