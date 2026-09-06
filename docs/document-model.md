@@ -84,6 +84,11 @@ composed and baked into the coordinates, so after an import everything is plain 
 Understood: `path` (the full grammar — relative commands, shorthands, elliptical arcs), `rect`, `circle`,
 `ellipse`, `line`, `polyline`, `polygon`, `image` (data URI or a file next to the SVG), and `g` nesting.
 
+Elements that draw nothing are dropped: `display="none"`, `visibility="hidden"`, and anything whose
+effective `fill` and `stroke` are both `none`. `fill`/`stroke` are inherited from the root and from groups,
+because icon sets ship an invisible full-canvas path as a bounding box — engraving it would burn a
+rectangle around the motif.
+
 Not understood, and reported in `skipped`: `text` (would need to resolve a font by family name — the GUI's
 job), `use`, clipping, masks, gradients. Rounded rectangle corners are ignored.
 

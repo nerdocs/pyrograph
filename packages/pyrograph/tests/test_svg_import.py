@@ -169,3 +169,32 @@ def test_rotate_around_a_point():
     rotated = parse_transform("rotate(90 5 5)").apply(Point(5, 0))
     assert rotated.x == pytest.approx(10.0)
     assert rotated.y == pytest.approx(5.0)
+
+
+# ------------------------------------------------------------------------------------- visibility
+
+
+def test_an_element_that_is_neither_filled_nor_stroked_is_skipped():
+    # Icon sets ship exactly this as an invisible bounding box; engraving it would burn a rectangle.
+    result = import_svg(
+        _svg('<path d="M0 0h24v24H0z" fill="none" stroke="none"/><path d="M0 0 L 5 5" stroke="black"/>')
+    )
+    assert len(list(result.document.objects())) == 1
+
+
+def test_paint_is_inherited_from_the_root_and_from_groups():
+    # The root strokes, so an unadorned child is visible; the one that switches the stroke off is not.
+    result = import_svg(
+        _svg('<path d="M0 0 L 5 5"/><path d="M0 0 L 5 5" stroke="none"/>', 'fill="none" stroke="black"')
+    )
+    assert len(list(result.document.objects())) == 1
+
+
+def test_paint_in_a_style_attribute_counts_too():
+    result = import_svg(_svg('<path d="M0 0 L 5 5" style="fill:none;stroke:none"/>'))
+    assert list(result.document.objects()) == []
+
+
+def test_visibility_hidden_is_skipped():
+    result = import_svg(_svg('<rect width="1" height="1" visibility="hidden"/>'))
+    assert list(result.document.objects()) == []

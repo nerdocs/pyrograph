@@ -383,18 +383,47 @@ def _image_data(element: ET.Element, base_dir: str | None) -> bytes | None:
 
 # ------------------------------------------------------------------------------------------------- walker
 
+#: SVG's initial values: shapes are filled black and not stroked unless something says otherwise.
+_INITIAL_PAINT = ("black", "none")
 
-def _walk(element: ET.Element, transform: Transform, base_dir: str | None, out: list, skipped: list) -> None:
+
+def _paint(element: ET.Element, inherited: tuple[str, str]) -> tuple[str, str]:
+    """The element's effective ``fill`` and ``stroke``, falling back to what it inherits."""
+    style = element.get("style", "")
+    result = []
+    for index, name in enumerate(("fill", "stroke")):
+        value = element.get(name)
+        if style:
+            match = re.search(rf"(?:^|;)\s*{name}\s*:\s*([^;]+)", style)
+            if match:
+                value = match.group(1).strip()
+        result.append(value if value else inherited[index])
+    return result[0], result[1]
+
+
+def _walk(
+    element: ET.Element,
+    transform: Transform,
+    base_dir: str | None,
+    out: list,
+    skipped: list,
+    paint: tuple[str, str] = _INITIAL_PAINT,
+) -> None:
     for child in element:
         if not isinstance(child.tag, str) or not child.tag.startswith(f"{{{SVG_NS}}}"):
             continue  # comments, processing instructions, foreign namespaces
         tag = child.tag[len(SVG_NS) + 2 :]
         combined = parse_transform(child.get("transform")).then(transform)
+        child_paint = _paint(child, paint)
 
         if tag in ("g", "svg", "a"):
-            _walk(child, combined, base_dir, out, skipped)
+            _walk(child, combined, base_dir, out, skipped, child_paint)
             continue
-        if child.get("display") == "none":
+        if child.get("display") == "none" or child.get("visibility") == "hidden":
+            continue
+        if child_paint == ("none", "none"):
+            # Neither filled nor stroked: the element draws nothing. Icon sets ship such paths as an
+            # invisible bounding box, and engraving one would burn a rectangle around the motif.
             continue
 
         if tag == "image":
@@ -452,7 +481,7 @@ def import_svg(source: str | os.PathLike | bytes) -> SvgImport:
 
     objects: list[DocumentObject] = []
     skipped: list[str] = []
-    _walk(root, root_transform, base_dir, objects, skipped)
+    _walk(root, root_transform, base_dir, objects, skipped, _paint(root, _INITIAL_PAINT))
 
     if not width_mm or not height_mm:
         # No declared size: let the content define the work area.

@@ -29,3 +29,4 @@
 - `MockTransport`: an in-memory device that answers queries, takes uploads and runs a job to completion.
 - Device abstraction in `pyrograph.devices`: profile, normalised status, and the LaserPecker adapter.
 - `pyrograph` CLI: import an SVG, show the device, frame a document and engrave it, with `--mock`.
+- SVG import drops invisible elements, so an icon's bounding-box path is no longer engraved.

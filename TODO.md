@@ -33,8 +33,10 @@
   USB-stick export with no importer in the vendor software, and the editable format is `.lp2` (ZIP with
   fabric.js objects). Neither is implemented. `.lpb` export is worth having, `.lp2` import needs a sample
   file to work against. Layout of both is in `docs/document-model.md`.
-- SVG import handles shapes, arcs, nested transforms and units; `text`, `use`, clipping, masks and
-  gradients are skipped and reported. Rounded rectangle corners are ignored.
+- SVG import handles shapes, arcs, nested transforms, units and fill/stroke inheritance; `text`, `use`,
+  clipping, masks and gradients are skipped and reported. Rounded rectangle corners are ignored.
+- **No scale/move operations.** An imported icon is a few millimetres wide and there is no command to
+  resize it — only the editor will bring that.
 - No DXF import.
 - **No spooler.** `LaserDevice.run()` blocks until the job is handed over and the caller polls
   `status()`. A queue with priorities (`docs/architecture.md`) is only worth building once the GUI
