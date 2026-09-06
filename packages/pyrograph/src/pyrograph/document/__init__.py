@@ -1,0 +1,39 @@
+"""The document model — geometry, objects, layers, undo and the ``.pyg`` file format.
+
+Nothing in here imports Qt or talks to a device. That is deliberate: the model stays testable without
+hardware, and a later GUI change touches nothing below it.
+"""
+
+from .commands import AddObject, Command, MoveObject, RemoveObject, SetLayerParams, UndoStack
+from .document import Document
+from .geometry import Close, CubicTo, LineTo, MoveTo, Path, Point, Rect, Transform
+from .layer import LaserParams, Layer
+from .objects import DocumentObject, ImageObject, PathObject, TextObject, new_id
+from .serialize import load_pyg, save_pyg
+
+__all__ = [
+    "AddObject",
+    "Close",
+    "Command",
+    "CubicTo",
+    "Document",
+    "DocumentObject",
+    "ImageObject",
+    "LaserParams",
+    "Layer",
+    "LineTo",
+    "MoveObject",
+    "MoveTo",
+    "Path",
+    "PathObject",
+    "Point",
+    "Rect",
+    "RemoveObject",
+    "SetLayerParams",
+    "TextObject",
+    "Transform",
+    "UndoStack",
+    "load_pyg",
+    "new_id",
+    "save_pyg",
+]

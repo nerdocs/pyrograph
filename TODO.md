@@ -28,5 +28,12 @@
 
 ## Application (pyrograph)
 
-- Document model — plan: `~/.claude/plans/2026-09-06-pyrograph-document-model.md`.
+- Document model done: geometry, objects, layers, undo, `.pyg` container, job creation
+  (`docs/document-model.md`).
+- **Vendor formats.** The plan assumed `.lpb` was the editable project format; it is not. `.lpb` is a baked
+  USB-stick export with no importer in the vendor software, and the editable format is `.lp2` (ZIP with
+  fabric.js objects). Neither is implemented. `.lpb` export is worth having, `.lp2` import needs a sample
+  file to work against. Layout of both is in `docs/document-model.md`.
+- No SVG import for foreign files — the path parser only reads back what we write.
+- `TextObject` needs a font file path; no lookup by family name, no kerning.
 - Everything else: editor, device abstraction, spooler, GUI.

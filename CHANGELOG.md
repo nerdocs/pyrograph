@@ -18,3 +18,8 @@
 - Documented the Android app's alternative upload method (`0xD0` packet frames) and its extra function codes.
 - Status mode 1 identified as "engraving"; engraving verified over Bluetooth as well as USB.
 - BLE transport closes on garbage collection — a leaked connection stops the device from advertising.
+- Document model in `pyrograph`: geometry, objects, layers with laser parameters — millimetres, no Qt, no device.
+- Undo/redo through commands; the document is only ever changed through one.
+- Native `.pyg` container: standard SVG for geometry, JSON for parameters, original bitmaps kept lossless.
+- Job creation turns a layer into a dithered raster at its own DPI, with the origin in device pixels.
+- `.lpb` identified as a baked USB-stick export, not a project format; the editable vendor format is `.lp2`.
