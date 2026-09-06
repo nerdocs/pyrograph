@@ -77,3 +77,38 @@ def test_transforms_are_written_only_when_they_do_something(tmp_path):
     elements = {e.get("id"): e for e in root.iter() if e.get("id")}
     assert elements["oplain"].get("transform") is None
     assert elements["omoved"].get("transform") == "matrix(1.0 0.0 0.0 1.0 5.0 5.0)"
+
+
+def test_an_objects_own_stroke_width_survives_the_round_trip(tmp_path):
+    thick = PathObject(id="othick", path=Path.rect(0, 0, 10, 10), stroke_width_mm=0.53)
+    thin = PathObject(id="othin", path=Path.rect(0, 0, 5, 5))
+    document = Document(layers=[Layer(objects=[thick, thin])])
+    path = tmp_path / "widths.pyg"
+    save_pyg(document, path)
+
+    loaded = load_pyg(path)
+    assert loaded == document
+    assert loaded.object("othick").stroke_width_mm == 0.53
+    assert loaded.object("othin").stroke_width_mm is None
+
+
+def test_the_svg_shows_the_width_that_will_burn(tmp_path):
+    document = Document(
+        layers=[
+            Layer(
+                params=LaserParams(line_width_mm=0.2),
+                objects=[
+                    PathObject(id="oown", path=Path.rect(0, 0, 1, 1), stroke_width_mm=0.5),
+                    PathObject(id="olayer", path=Path.rect(0, 0, 1, 1)),
+                ],
+            )
+        ]
+    )
+    path = tmp_path / "widths.pyg"
+    save_pyg(document, path)
+
+    with zipfile.ZipFile(path) as archive:
+        root = ET.fromstring(archive.read("document.svg"))
+    elements = {e.get("id"): e for e in root.iter() if e.get("id")}
+    assert elements["oown"].get("stroke-width") == "0.5"
+    assert elements["olayer"].get("stroke-width") == "0.2"

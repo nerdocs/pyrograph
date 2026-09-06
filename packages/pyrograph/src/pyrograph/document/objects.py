@@ -30,6 +30,13 @@ class DocumentObject:
     transform: Transform = field(default_factory=Transform)
     locked: bool = False
 
+    stroke_width_mm: float | None = None
+    """How wide this object's outline burns. ``None`` means the layer decides.
+
+    An SVG carries its own stroke width, and it is part of the drawing: an icon drawn with a heavy stroke
+    stays heavy when it is scaled up. Objects that are not stroked — a bitmap — ignore this.
+    """
+
     def local_path(self) -> Path:
         """The object's outline in its own coordinate system, before ``transform``."""
         raise NotImplementedError

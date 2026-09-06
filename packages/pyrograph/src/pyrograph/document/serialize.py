@@ -34,11 +34,15 @@ XLINK_NS = "http://www.w3.org/1999/xlink"
 FORMAT = "pyrograph-document"
 VERSION = 1
 
-_STROKE = {"fill": "none", "stroke": "#000000", "stroke-width": "0.1"}
+_STROKE = {"fill": "none", "stroke": "#000000"}
 
 
-def _svg_element(obj: DocumentObject) -> ET.Element:
-    """Render one object as the SVG element that represents its geometry."""
+def _svg_element(obj: DocumentObject, line_width_mm: float) -> ET.Element:
+    """Render one object as the SVG element that represents its geometry.
+
+    ``line_width_mm`` is the layer's width, used for objects that do not carry one of their own — the
+    SVG has to show *some* width, and showing the one that will actually burn is the useful choice.
+    """
     if isinstance(obj, ImageObject):
         element = ET.Element(
             f"{{{SVG_NS}}}image",
@@ -53,7 +57,13 @@ def _svg_element(obj: DocumentObject) -> ET.Element:
         )
     else:
         element = ET.Element(
-            f"{{{SVG_NS}}}path", {"id": obj.id, "d": obj.local_path().to_svg_d(), **_STROKE}
+            f"{{{SVG_NS}}}path",
+            {
+                "id": obj.id,
+                "d": obj.local_path().to_svg_d(),
+                "stroke-width": repr(obj.stroke_width_mm or line_width_mm),
+                **_STROKE,
+            },
         )
     if not obj.transform.is_identity:
         element.set("transform", obj.transform.to_svg())
@@ -76,12 +86,14 @@ def _build_svg(document: Document) -> bytes:
         if not layer.visible:
             group.set("display", "none")
         for obj in layer.objects:
-            group.append(_svg_element(obj))
+            group.append(_svg_element(obj, layer.params.line_width_mm))
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
 def _object_json(obj: DocumentObject) -> dict:
     entry = {"id": obj.id, "name": obj.name, "locked": obj.locked}
+    if obj.stroke_width_mm is not None:
+        entry["stroke_width_mm"] = obj.stroke_width_mm
     if isinstance(obj, ImageObject):
         entry["type"] = "image"
     elif isinstance(obj, TextObject):
@@ -129,6 +141,7 @@ def _read_object(entry: dict, element: ET.Element, archive: zipfile.ZipFile) -> 
         "name": entry.get("name", ""),
         "locked": entry.get("locked", False),
         "transform": transform,
+        "stroke_width_mm": entry.get("stroke_width_mm"),
     }
     kind = entry["type"]
     if kind == "image":

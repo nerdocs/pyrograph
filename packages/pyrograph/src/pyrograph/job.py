@@ -39,6 +39,32 @@ class RasterJob:
         return max(0, int(self.y_mm * self.dpi / MM_PER_INCH))
 
 
+def _stroke_width_mm(obj, layer) -> float:
+    """How wide this object burns: its own width if it has one, else the layer's."""
+    if isinstance(obj, ImageObject):
+        return 0.0
+    return obj.stroke_width_mm or layer.params.line_width_mm
+
+
+def _stroke(draw, points: list[tuple[float, float]], width_px: int) -> None:
+    """Draw a polyline with round joints and round caps.
+
+    Pillow's own ``joint="curve"`` rasterises the joints slightly differently from the line itself, which
+    leaves notches along a wide outline, and it has no caps at all. Both matter here: SVG icon sets draw a
+    dot as a zero-length segment (``<line x1="10" x2="10.01">``) that exists only because of a round cap,
+    and without one the dot disappears.
+
+    Round rather than SVG's default butt cap: the difference is half a line width, while the failure mode
+    of a butt cap is losing a dot entirely.
+    """
+    draw.line(points, fill=0, width=width_px)
+    if width_px <= 2:
+        return  # a thin line needs no help; the joints are a pixel wide
+    radius = width_px / 2
+    for x, y in points:
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=0)
+
+
 def build_raster_job(
     document: Document,
     layer_index: int,
@@ -47,15 +73,18 @@ def build_raster_job(
 ) -> RasterJob | None:
     """Rasterise one layer at its own DPI. Returns ``None`` if the layer holds nothing to burn.
 
-    Paths are stroked at the layer's ``line_width_mm``; filling them is not implemented, because a laser
-    follows outlines.
+    Paths are stroked at their own ``stroke_width_mm``, or at the layer's ``line_width_mm`` where they
+    carry none. Filling them is not implemented, because a laser follows outlines.
     """
     from PIL import Image, ImageChops, ImageDraw
 
     layer = document.layers[layer_index]
     box = None
     for obj in layer.objects:
-        box = obj.bounds() if box is None else box.union(obj.bounds())
+        # A stroke straddles the path, so the ink reaches half a line width beyond the geometry.
+        # Ignoring that clips the outer half of every outline — and gives a dot no area at all.
+        inked = obj.bounds().grown(_stroke_width_mm(obj, layer) / 2)
+        box = inked if box is None else box.union(inked)
     if box is None or box.width <= 0 or box.height <= 0:
         return None
 
@@ -65,7 +94,6 @@ def build_raster_job(
     # Document millimetres → canvas pixels.
     to_canvas = Transform.translate(-box.x, -box.y).then(Transform.scale(scale))
 
-    stroke_px = max(1, round(layer.params.line_width_mm * scale))
     canvas = Image.new("L", (width_px, height_px), 255)  # 255 = untouched
     draw = ImageDraw.Draw(canvas)
     for obj in layer.objects:
@@ -84,9 +112,9 @@ def build_raster_job(
             canvas = ImageChops.darker(canvas, placed)
             draw = ImageDraw.Draw(canvas)
         else:
+            stroke_px = max(1, round(_stroke_width_mm(obj, layer) * scale))
             for line in obj.local_path().transformed(placement).polylines():
-                # "curve" rounds the joints; without it a wide polyline shows notches at every corner.
-                draw.line([(p.x, p.y) for p in line], fill=0, width=stroke_px, joint="curve")
+                _stroke(draw, [(p.x, p.y) for p in line], stroke_px)
 
     mono = dither(list(canvas.tobytes()), width_px, height_px, inverse)
     payload = pack_bits(mono, width_px, height_px) if packed else bytes(mono)

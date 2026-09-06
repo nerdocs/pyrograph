@@ -41,9 +41,10 @@
 - **No scale/move operations.** An imported icon is a few millimetres wide and there is no command to
   resize it — only the editor will bring that.
 - No DXF import.
-- **SVG `stroke-width` is discarded on import.** The stroke width comes from the layer, so an icon that
-  was drawn with a heavy stroke loses that relation when it is scaled up. Per-object stroke width would
-  fix it, at the cost of a new field through model, import, serialisation and rasteriser.
+- `stroke-linecap` and `stroke-linejoin` are not read; the rasteriser always draws them round. The
+  difference to a butt cap is half a line width, and round is what keeps icon dots alive.
+- **Scaling must scale `stroke_width_mm` with the geometry.** There is no scale operation yet, so every
+  caller does it by hand — the first one that forgets gets a hairline on a large motif.
 - **No spooler.** `LaserDevice.run()` blocks until the job is handed over and the caller polls
   `status()`. A queue with priorities (`docs/architecture.md`) is only worth building once the GUI
   needs to stay responsive.

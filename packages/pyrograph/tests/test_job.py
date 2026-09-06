@@ -4,7 +4,18 @@ The reference numbers come from the verified hardware run: 15 mm at 254 dpi is 1
 40 mm is 400 px.
 """
 
-from pyrograph.document import Document, ImageObject, LaserParams, Layer, Path, PathObject, Transform
+from pyrograph.document import (
+    Document,
+    ImageObject,
+    LaserParams,
+    Layer,
+    LineTo,
+    MoveTo,
+    Path,
+    PathObject,
+    Point,
+    Transform,
+)
 from pyrograph.job import build_raster_job
 
 
@@ -57,7 +68,8 @@ def test_a_path_is_stroked_into_the_raster():
     )
     job = build_raster_job(document, 0)
 
-    assert (job.raster.width, job.raster.height) == (100, 100)
+    # 10 mm of geometry plus half the 0.1 mm stroke on each side — the ink, not the path.
+    assert (job.raster.width, job.raster.height) == (101, 101)
     assert any(value == 0 for value in job.raster.payload)
 
 
@@ -91,3 +103,27 @@ def test_a_line_width_below_one_pixel_still_draws():
         ]
     )
     assert build_raster_job(document, 0).raster.payload.count(0) > 0
+
+
+def test_an_objects_own_stroke_width_beats_the_layer():
+    def burnt(stroke_width_mm):
+        document = Document(
+            layers=[
+                Layer(
+                    params=LaserParams(dpi=254.0, line_width_mm=0.1),
+                    objects=[PathObject(path=Path.rect(0, 0, 10, 10), stroke_width_mm=stroke_width_mm)],
+                )
+            ]
+        )
+        return build_raster_job(document, 0).raster.payload.count(0)
+
+    assert burnt(0.5) > burnt(None)
+
+
+def test_a_zero_length_segment_burns_a_dot():
+    # SVG icon sets draw a dot this way; it exists only because the cap is round.
+    dot = PathObject(path=Path([MoveTo(Point(5, 5)), LineTo(Point(5.01, 5))]), stroke_width_mm=1.0)
+    document = Document(layers=[Layer(params=LaserParams(dpi=254.0), objects=[dot])])
+
+    job = build_raster_job(document, 0)
+    assert job.raster.payload.count(0) > 20  # a 1 mm dot at 254 dpi is roughly 10 px across

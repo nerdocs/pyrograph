@@ -383,22 +383,44 @@ def _image_data(element: ET.Element, base_dir: str | None) -> bytes | None:
 
 # ------------------------------------------------------------------------------------------------- walker
 
-#: SVG's initial values: shapes are filled black and not stroked unless something says otherwise.
-_INITIAL_PAINT = ("black", "none")
+#: SVG's initial values: shapes are filled black, not stroked, and a stroke would be one unit wide.
+_INITIAL_PAINT = ("black", "none", "1")
+
+_PAINT_PROPERTIES = ("fill", "stroke", "stroke-width")
 
 
-def _paint(element: ET.Element, inherited: tuple[str, str]) -> tuple[str, str]:
-    """The element's effective ``fill`` and ``stroke``, falling back to what it inherits."""
+def _paint(element: ET.Element, inherited: tuple[str, str, str]) -> tuple[str, str, str]:
+    """The element's effective ``fill``, ``stroke`` and ``stroke-width``, falling back to what it inherits.
+
+    All three inherit in SVG, and an icon set relies on it: the root sets the stroke, every path below it
+    just draws.
+    """
     style = element.get("style", "")
     result = []
-    for index, name in enumerate(("fill", "stroke")):
+    for index, name in enumerate(_PAINT_PROPERTIES):
         value = element.get(name)
         if style:
             match = re.search(rf"(?:^|;)\s*{name}\s*:\s*([^;]+)", style)
             if match:
                 value = match.group(1).strip()
         result.append(value if value else inherited[index])
-    return result[0], result[1]
+    return result[0], result[1], result[2]
+
+
+def _stroke_width_mm(paint: tuple[str, str, str], transform: Transform) -> float | None:
+    """The stroke width in millimetres, or ``None`` when the element is not stroked at all.
+
+    A renderer scales the stroke along with the geometry, so the width goes through the same transform.
+    For a non-uniform or rotated one there is no single factor; the square root of the determinant is the
+    usual stand-in, and it is exact whenever the scaling is uniform.
+    """
+    if paint[1] == "none":
+        return None  # only filled — its outline is the layer's business, not the file's
+    match = _LENGTH_RE.match(paint[2])
+    if not match:
+        return None
+    scale = math.sqrt(abs(transform.a * transform.d - transform.b * transform.c))
+    return float(match.group(1)) * scale
 
 
 def _walk(
@@ -407,7 +429,7 @@ def _walk(
     base_dir: str | None,
     out: list,
     skipped: list,
-    paint: tuple[str, str] = _INITIAL_PAINT,
+    paint: tuple[str, str, str] = _INITIAL_PAINT,
 ) -> None:
     for child in element:
         if not isinstance(child.tag, str) or not child.tag.startswith(f"{{{SVG_NS}}}"):
@@ -421,7 +443,7 @@ def _walk(
             continue
         if child.get("display") == "none" or child.get("visibility") == "hidden":
             continue
-        if child_paint == ("none", "none"):
+        if child_paint[0] == "none" and child_paint[1] == "none":
             # Neither filled nor stroked: the element draws nothing. Icon sets ship such paths as an
             # invisible bounding box, and engraving one would burn a rectangle around the motif.
             continue
@@ -446,7 +468,13 @@ def _walk(
         if path is not None:
             if path.segments:
                 # The transform is baked into the coordinates: after import everything is plain millimetres.
-                out.append(PathObject(name=child.get("id", ""), path=path.transformed(combined)))
+                out.append(
+                    PathObject(
+                        name=child.get("id", ""),
+                        path=path.transformed(combined),
+                        stroke_width_mm=_stroke_width_mm(child_paint, combined),
+                    )
+                )
         elif tag not in ("defs", "title", "desc", "metadata", "style") and tag not in skipped:
             skipped.append(tag)
 

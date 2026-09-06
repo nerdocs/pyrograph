@@ -84,6 +84,16 @@ composed and baked into the coordinates, so after an import everything is plain 
 Understood: `path` (the full grammar — relative commands, shorthands, elliptical arcs), `rect`, `circle`,
 `ellipse`, `line`, `polyline`, `polygon`, `image` (data URI or a file next to the SVG), and `g` nesting.
 
+`stroke-width` is part of the drawing, so it is imported too, converted to millimetres and scaled by the
+transform the way a renderer would. A shape that is only filled keeps `None` and falls back to the layer —
+the file says nothing about how wide to burn an outline it never drew.
+
+Design Space does it differently, and it is worth knowing why we do not copy it. It keeps the SVG's
+`strokeWidth` but sets fabric's `strokeUniform`, so a later resize leaves the line width alone; that is an
+editor decision, not an import one, and it does not arise until there is an editor. It also reads user
+units as points at 72 dpi and ignores `width`/`height` entirely, which turns a `width="100mm"
+viewBox="0 0 200 100"` file into 70.5 mm. The specification says 96 dpi and says the physical size wins.
+
 Elements that draw nothing are dropped: `display="none"`, `visibility="hidden"`, and anything whose
 effective `fill` and `stroke` are both `none`. `fill`/`stroke` are inherited from the root and from groups,
 because icon sets ship an invisible full-canvas path as a bounding box — engraving it would burn a
@@ -102,6 +112,15 @@ not fill them. Vector output waits for the line/fill command (`0x40`) to be deco
 The stroke width matters more than it looks. Measured on paper at power 30: a filled area comes out solid
 black, the same settings with a 0.1 mm hairline are barely visible, and 0.3 mm is clearly legible. In a
 filled patch neighbouring rows reinforce each other; a single-pixel line gets exactly one pass.
+
+Two consequences of taking the width seriously:
+
+* **The raster covers the ink, not the path.** A stroke straddles its geometry, so the bounding box grows
+  by half a line width on every side. Without that the outer half of every outline is clipped, and a dot —
+  a zero-length segment — has no area at all and produces no job.
+* **Joints and caps are drawn round.** Pillow's own `joint="curve"` rasterises joints slightly differently
+  from the line, which leaves notches along a wide outline, and it has no caps. Icon sets draw a dot as
+  `<line x1="10" x2="10.01">`, which exists only because the cap is round.
 
 At 254 dpi one millimetre is exactly ten pixels, which makes the numbers easy to check against a hardware
 run: 15 mm is 150 px, an origin of 40 mm is `nx = 400`.

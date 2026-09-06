@@ -51,6 +51,10 @@ class Rect:
         ys = [p.y for p in points]
         return cls(min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
 
+    def grown(self, margin: float) -> "Rect":
+        """The same rectangle with ``margin`` added on every side."""
+        return Rect(self.x - margin, self.y - margin, self.width + 2 * margin, self.height + 2 * margin)
+
     def union(self, other: "Rect") -> "Rect":
         """The smallest rectangle containing both."""
         x = min(self.x, other.x)

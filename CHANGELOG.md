@@ -32,3 +32,6 @@
 - SVG import drops invisible elements, so an icon's bounding-box path is no longer engraved.
 - Stroke width per layer (`line_width_mm`); a one-pixel hairline burns too faintly to see on paper.
 - Engraving from a pyrograph document verified on hardware: SVG icon to marked workpiece.
+- SVG `stroke-width` is imported per object, converted to millimetres and scaled with the transform.
+- The raster covers the stroked ink instead of the bare path, so wide outlines are no longer clipped.
+- Round joints and caps when stroking, so icon dots drawn as zero-length segments survive.

@@ -198,3 +198,39 @@ def test_paint_in_a_style_attribute_counts_too():
 def test_visibility_hidden_is_skipped():
     result = import_svg(_svg('<rect width="1" height="1" visibility="hidden"/>'))
     assert list(result.document.objects()) == []
+
+
+# ------------------------------------------------------------------------------------ stroke width
+
+
+def test_the_stroke_width_is_converted_to_millimetres():
+    # 200 user units across 100 mm → one unit is half a millimetre, so a 2-unit stroke is 1 mm.
+    result = import_svg(
+        _svg(
+            '<path d="M 0 0 L 10 0" stroke="black" stroke-width="2"/>',
+            'width="100mm" height="50mm" viewBox="0 0 200 100"',
+        )
+    )
+    assert next(result.document.objects()).stroke_width_mm == pytest.approx(1.0)
+
+
+def test_the_stroke_width_scales_with_the_transform():
+    result = import_svg(
+        _svg('<g transform="scale(3)"><path d="M 0 0 L 5 0" stroke="black" stroke-width="2"/></g>')
+    )
+    # 2 units, tripled by the group, then one unit is one millimetre here.
+    assert next(result.document.objects()).stroke_width_mm == pytest.approx(6.0)
+
+
+def test_the_stroke_width_is_inherited_from_the_root():
+    result = import_svg(
+        _svg('<path d="M 0 0 L 10 0"/>', 'viewBox="0 0 100 100" width="100mm" height="100mm" '
+             'stroke="black" stroke-width="2"')
+    )
+    assert next(result.document.objects()).stroke_width_mm == pytest.approx(2.0)
+
+
+def test_a_shape_that_is_only_filled_leaves_the_width_to_the_layer():
+    # No stroke means the outline is ours to choose — the file says nothing about how wide to burn it.
+    result = import_svg(_svg('<rect width="10" height="10" fill="black" stroke="none"/>'))
+    assert next(result.document.objects()).stroke_width_mm is None
