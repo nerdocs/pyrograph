@@ -185,7 +185,7 @@ class LaserPecker:
         packed: bool = False,
         brightness: float = 0.0,
         contrast: float = 0.0,
-        name: str = "claude",
+        name: str = "laserpecker",
         progress=None,
     ) -> int:
         """Dither, upload and start an engraving job. Returns the file ID."""

@@ -4,7 +4,7 @@ Qt Widgets (PySide6), started with `pyrograph-gui [file.pyg]`.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ File  Edit  Modify  View                                             │
+│ File  Edit  Modify  Device  View                                     │
 │ Open Save │ Cut Copy Paste Delete │ Undo Redo │ Frame Engrave        │
 ├───┬───────────────┬──────────────────────────────┬───────────────────┤
 │ ▶ │ Layers        │  0    20    40    60    80   │ Connection        │
@@ -62,7 +62,13 @@ about; on release, one `CommandGroup` describes the whole thing. Moving three ob
 | Text | Click, then choose the content, family and height |
 | QR code, Barcode | Click, then enter the content and size |
 
-Shift while dragging a corner handle keeps the proportions.
+Shift while dragging a corner handle keeps the proportions. Shift while dragging out a rubber band extends
+the selection instead of replacing it, the same as Shift-clicking does.
+
+A locked object is filtered out of the selection in one place, `CanvasView.set_selection`, and the mouse
+looks straight through it. Nothing that cannot be selected can be moved, scaled, aligned or deleted either,
+which is the whole of what locking is supposed to mean — spreading the check over each of those is how one
+of them ends up forgotten.
 
 Adding a tool is a class in `gui/tools.py` and one line in `build_tools()` — the canvas has no branch per
 tool. A tool only receives millimetres and asks the canvas for a preview, a ghost outline or an edit.
@@ -120,7 +126,20 @@ writer. While a job runs, the worker's wait loop calls `processEvents()` between
 Engraving hands the worker a deep copy of the document. Rasterising a large image takes seconds, and this
 way it happens on the worker thread while the document stays editable.
 
-An idle device is polled once a second; while a job runs, the wait loop reports the state instead.
+An idle device is polled once a second; while a job runs, the wait loop reports the state instead. If a poll
+raises — a pulled cable, a dropped BLE session — the panel says so and closes the connection, rather than
+letting the timer raise again a second later while still claiming the machine is fine.
+
+**A job is not over before it has started.** A machine that has just been handed a job still reports itself
+idle for a moment, so the wait loop waits for the first *running* before an idle reply is allowed to mean
+"finished" — otherwise the panel frees its buttons while the head is moving, and a two-layer document
+uploads its second layer on top of one that is still burning. A pause does not end the wait either: a
+paused machine has not finished, it is waiting. A device that never starts at all is given five seconds.
+
+**One question before unsaved work is discarded.** New, Open and Import all replace the whole document, so
+all three ask the same question closing does. Whether there is anything to ask about comes from the undo
+stack, which remembers how far back the last save was: undoing every change since it makes the document
+unmodified again, and the title loses its star.
 
 **Plugging in selects the machine.** The port list is polled every two seconds — reading it is a look at
 the operating system's device table, no traffic on any port — and an engraver that was not there a moment

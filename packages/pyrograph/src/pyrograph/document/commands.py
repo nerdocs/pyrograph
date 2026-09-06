@@ -29,17 +29,39 @@ class Command(ABC):
 
 
 class UndoStack:
-    """Executes commands against one document and keeps the history."""
+    """Executes commands against one document and keeps the history.
+
+    The stack also knows how far back the last save was, so undoing every change since it reports the
+    document as unmodified again — counting edits instead would keep claiming unsaved work after the user
+    has taken all of it back.
+    """
 
     def __init__(self, document: Document) -> None:
         self.document = document
         self._done: list[Command] = []
         self._undone: list[Command] = []
+        self._clean: int | None = 0
 
     def execute(self, command: Command) -> None:
         command.do(self.document)
+        if self._clean is not None and self._clean > len(self._done):
+            # The saved state lives in the redo branch this edit has just thrown away; there is no
+            # sequence of undos that reaches it any more.
+            self._clean = None
         self._done.append(command)
         self._undone.clear()
+
+    def mark_clean(self) -> None:
+        """The document now matches what is on disk."""
+        self._clean = len(self._done)
+
+    def mark_dirty(self) -> None:
+        """The document differs from disk for a reason the history cannot see — an import, say."""
+        self._clean = None
+
+    @property
+    def is_clean(self) -> bool:
+        return self._clean == len(self._done)
 
     @property
     def can_undo(self) -> bool:

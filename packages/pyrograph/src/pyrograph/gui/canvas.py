@@ -49,6 +49,7 @@ _GRID = QColor("#d8d8d8")
 _INK = QColor("#101010")
 _OUTSIDE = QColor("#3a3a3a")
 _MARK = QColor("#1c7ed6")
+_BROKEN = QColor("#d63939")
 
 
 def _painter_path(path: Path) -> QPainterPath:
@@ -109,6 +110,7 @@ class CanvasView(QGraphicsView):
         self._document: Document | None = None
         self._items: dict[str, object] = {}
         self._bounds: dict[str, Rect] = {}
+        self._locked: set[str] = set()
         self._overlay: list = []
         self._ghost = None
         self._band = None
@@ -138,6 +140,7 @@ class CanvasView(QGraphicsView):
         scene = self.scene()
         scene.clear()
         self._items, self._bounds, self._overlay, self._ghost, self._band = {}, {}, [], None, None
+        self._locked = set()
         if self._document is None:
             return
         self._draw_bed(self._document)
@@ -165,8 +168,10 @@ class CanvasView(QGraphicsView):
         edge.setCosmetic(True)
         scene.addRect(0, 0, document.width_mm, document.height_mm, edge, _BED)
 
-        grid = QPainterPath()
         step = self.grid_mm
+        if step <= 0:
+            return  # a step of zero would advance the loops below by nothing at all
+        grid = QPainterPath()
         x = step
         while x < document.width_mm:
             grid.moveTo(x, 0)
@@ -184,12 +189,18 @@ class CanvasView(QGraphicsView):
     def _draw_object(self, obj: DocumentObject, line_width_mm: float) -> None:
         if isinstance(obj, ImageObject):
             pixmap = QPixmap.fromImage(QImage.fromData(obj.data))
-            item = self.scene().addPixmap(pixmap)
-            item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-            pixels_to_mm = DocTransform.scale(
-                obj.width_mm / pixmap.width(), obj.height_mm / pixmap.height()
-            )
-            item.setTransform(_qt_transform(pixels_to_mm.then(obj.transform)))
+            if pixmap.isNull():
+                # Data no image library here can decode. Marking the place it claims beats letting the
+                # redraw fail: a rebuild that raises takes undo down with it, and there is no way back
+                # out of a document that cannot be drawn.
+                item = self._draw_broken(obj)
+            else:
+                item = self.scene().addPixmap(pixmap)
+                item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+                pixels_to_mm = DocTransform.scale(
+                    obj.width_mm / pixmap.width(), obj.height_mm / pixmap.height()
+                )
+                item.setTransform(_qt_transform(pixels_to_mm.then(obj.transform)))
         else:
             path = _painter_path(obj.local_path().transformed(obj.transform))
             width = obj.stroke_width_mm if obj.stroke_width_mm is not None else line_width_mm
@@ -204,10 +215,25 @@ class CanvasView(QGraphicsView):
         item.setData(0, obj.id)
         self._items[obj.id] = item
         self._bounds[obj.id] = obj.bounds()
+        if obj.locked:
+            self._locked.add(obj.id)
+
+    def _draw_broken(self, obj: ImageObject):
+        """The outline an undecodable image would have occupied, so it can still be found and removed."""
+        pen = QPen(_BROKEN)
+        pen.setCosmetic(True)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        item = self.scene().addRect(QRectF(0, 0, obj.width_mm, obj.height_mm), pen)
+        item.setTransform(_qt_transform(obj.transform))
+        return item
 
     # ------------------------------------------------------------------ selection
 
     def set_selection(self, ids: list[str]) -> None:
+        # Locked objects are filtered here rather than at every call site: nothing that cannot be
+        # selected can be moved, scaled, aligned or deleted either, which is the whole of what locking
+        # is supposed to mean.
+        ids = [i for i in ids if i not in self._locked]
         if ids != self.selection:
             self.selection = ids
             self._update_overlay()
@@ -222,8 +248,12 @@ class CanvasView(QGraphicsView):
     def select_all(self) -> None:
         self.set_selection(list(self._items))
 
-    def select_in(self, rect: Rect) -> None:
-        self.set_selection([i for i, box in self._bounds.items() if _intersects(box, rect)])
+    def select_in(self, rect: Rect, add: bool = False) -> None:
+        """Select what the rectangle covers, adding to the selection instead of replacing it if asked."""
+        found = [i for i, box in self._bounds.items() if _intersects(box, rect)]
+        if add:
+            found = self.selection + [i for i in found if i not in self.selection]
+        self.set_selection(found)
 
     def selection_bounds(self) -> Rect | None:
         """The bounding box of everything selected, in millimetres."""
@@ -234,8 +264,10 @@ class CanvasView(QGraphicsView):
         return box
 
     def object_at(self, position) -> str | None:
+        """The topmost object under the pointer. A locked one is not there as far as the mouse cares —
+        otherwise it would swallow the click and block the band select that was meant to go around it."""
         for item in self.items(position.toPoint()):
-            if item.data(0):
+            if item.data(0) and item.data(0) not in self._locked:
                 return item.data(0)
         return None
 
@@ -402,7 +434,7 @@ class CanvasView(QGraphicsView):
             self.tool.release(self, self._mm(event.position()), event)
 
     def mouseDoubleClickEvent(self, event) -> None:
-        if self.tool.name != "pan":
+        if self.tool.name != "pan" and event.button() is Qt.MouseButton.LeftButton:
             self.tool.double_click(self, self._mm(event.position()), event)
 
     def leaveEvent(self, event) -> None:

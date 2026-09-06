@@ -487,11 +487,16 @@ def import_svg(source: str | os.PathLike | bytes) -> SvgImport:
     pixels and the work area is taken from the content.
     """
     base_dir = None
-    if isinstance(source, bytes):
-        root = ET.fromstring(source)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(os.fspath(source)))
-        root = ET.parse(os.fspath(source)).getroot()
+    try:
+        if isinstance(source, bytes):
+            root = ET.fromstring(source)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(os.fspath(source)))
+            root = ET.parse(os.fspath(source)).getroot()
+    except ET.ParseError as error:
+        # A file that is not well-formed is a bad SVG like any other; callers should not have to catch
+        # ElementTree's own exception on top of ours to say so.
+        raise SvgImportError(f"not well-formed XML: {error}") from error
     if root.tag != f"{{{SVG_NS}}}svg":
         raise SvgImportError(f"root element is {root.tag!r}, not an SVG")
 

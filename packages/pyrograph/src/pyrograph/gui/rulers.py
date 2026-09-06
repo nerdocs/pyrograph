@@ -54,7 +54,6 @@ class Ruler(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.fillRect(self.rect(), _BACKGROUND)
-        painter.setPen(QPen(_LINE))
 
         pixels_per_mm = self._view.transform().m11()
         if pixels_per_mm <= 0:
@@ -62,7 +61,6 @@ class Ruler(QWidget):
         length = self.width() if self._horizontal else self.height()
         start_mm = self._to_mm(0)
         step = _step_mm(pixels_per_mm)
-        painter.setPen(QPen(_TEXT))
 
         tick = (int(start_mm / step) - 1) * step
         while True:
@@ -87,13 +85,16 @@ class Ruler(QWidget):
 
     def _draw_tick(self, painter: QPainter, position: float, label: float | None, minor: bool) -> None:
         size = 4 if minor else THICKNESS
+        painter.setPen(QPen(_LINE))
         if self._horizontal:
             painter.drawLine(QPointF(position, THICKNESS - size), QPointF(position, THICKNESS))
             if label is not None:
+                painter.setPen(QPen(_TEXT))
                 painter.drawText(QPointF(position + 2, THICKNESS - 9), f"{label:g}")
         else:
             painter.drawLine(QPointF(THICKNESS - size, position), QPointF(THICKNESS, position))
             if label is not None:
+                painter.setPen(QPen(_TEXT))
                 # Vertical labels read from the bottom up, the way every drawing program writes them.
                 painter.save()
                 painter.translate(THICKNESS - 10, position - 2)

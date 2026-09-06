@@ -73,6 +73,9 @@
 - Done: canvas with tools (select/move/scale, line, rectangle, ellipse, polyline, polygon, text, QR,
   barcode), clipboard, align/distribute/mirror/rotate/array, rulers, grid and snapping, layer panel,
   device panel on a worker thread (`docs/gui.md`). Headless tests run on Qt's `offscreen` platform.
+- **Never run on hardware:** the wait loop now waits for the device to report *running* before an idle
+  reply ends a job. The five-second grace period is a guess — measure how long an LP2 actually takes to
+  switch modes after `print_start` and set it from that. A multi-layer document is the test.
 - **No rotation from the canvas.** Only the menu's 90° steps; there is no rotation handle and no free
   angle. `Transform.rotate` is there, the interaction is not.
 - **No node editing** — a path's points cannot be moved once it is drawn. Together with grouping, the
@@ -89,11 +92,18 @@
 - Engraving hands the worker a deep copy; a second job cannot be queued while one runs (no spooler).
 - The device profile is not read by the canvas: the work area comes from the document, so a document
   larger than the machine bed is not flagged.
-- BLE connects by name or address typed by hand; `scan_ble()` exists but there is no scan dialog, and
-  autodetection covers USB only.
+- Autodetection covers USB only; Bluetooth has a Scan button, because there is nothing to poll.
 - Autodetection only offers the port; there is no setting for connecting to it straight away.
+- Objects can be locked in the model and the GUI honours it, but nothing can *set* the flag — it only
+  arrives through a file. A lock toggle needs the object list that does not exist yet.
 - The font scan reads every file in the font directories (~2 s on a full desktop) and is only cached for
   the session. A missing family reports itself, but there is no way to pick a file by hand.
 - Barcodes carry no human-readable digits underneath, and neither generator draws its quiet zone —
   the clearance has to be kept free by placing the code with room around it.
 - Undo/redo have no visible history, and the window has no "revert to saved".
+- An image the platform cannot decode is drawn as a red dashed outline, and engraving such a document
+  fails the whole job with Pillow's `UnidentifiedImageError` reported as a device error. Refusing the one
+  object and burning the rest would be friendlier, but silently dropping geometry from a job needs more
+  thought than a `try` around the decode.
+- The canvas bed comes from the document, so an SVG larger than the machine draws a work area the LP2
+  does not have. The device profile knows the real size and is not consulted.

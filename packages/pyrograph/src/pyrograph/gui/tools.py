@@ -62,6 +62,7 @@ class SelectTool(Tool):
         self._start = Point()
         self._anchor = Point()
         self._handle = 0
+        self._add = False
         self._bounds: Rect | None = None
 
     def press(self, canvas, point: Point, event) -> None:
@@ -77,7 +78,10 @@ class SelectTool(Tool):
 
         object_id = canvas.object_at(event.position())
         if object_id is None:
-            if not event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            # Shift means "and this too", the same as it does for a click — the release has to honour it
+            # as well, or the band replaces the selection it was told to extend.
+            self._add = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            if not self._add:
                 canvas.set_selection([])
             self._mode = "band"
             self._start = point
@@ -101,9 +105,12 @@ class SelectTool(Tool):
 
     def release(self, canvas, point: Point, event) -> None:
         if self._mode == "band":
-            canvas.select_in(canvas.end_band())
+            canvas.select_in(canvas.end_band(), add=self._add)
         elif self._mode in ("move", "scale"):
             canvas.commit_preview(self._transform(canvas, point, event))
+        self._mode = ""
+
+    def deactivate(self, canvas) -> None:
         self._mode = ""
 
     def _transform(self, canvas, point: Point, event) -> Transform:

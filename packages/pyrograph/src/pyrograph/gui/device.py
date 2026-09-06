@@ -38,6 +38,15 @@ from .discovery import PortWatcher
 POLL_MS = 1000
 """How often an idle device is asked how it is doing."""
 
+WAIT_STEP_MS = 200
+"""How often a running job is asked how far it has come."""
+
+START_TIMEOUT_MS = 5000
+"""How long a device may take to report itself running after it has been handed a job."""
+
+_ACTIVE = (DeviceState.RUNNING, DeviceState.PAUSED)
+"""States that mean the job is not over — a paused machine has not finished, it is waiting."""
+
 _COLOUR = {
     DeviceState.OFFLINE: "#808080",
     DeviceState.IDLE: "#2e9e4f",
@@ -113,13 +122,20 @@ class DeviceWorker(QObject):
 
     @Slot()
     def close_device(self) -> None:
-        self._timer.stop()
+        if self._timer is not None:
+            self._timer.stop()
         if self.device is not None:
-            # Closing the port does not stop the machine: it would keep tracing the outline with nobody
-            # left to tell it otherwise.
-            self.stop_frame()
-            self.device.close()
+            try:
+                # Closing the port does not stop the machine: it would keep tracing the outline with
+                # nobody left to tell it otherwise.
+                self.device.stop_frame()
+                self.device.close()
+            except Exception:
+                # A link that has already gone cannot be closed cleanly, and saying so twice — once for
+                # what broke it, once for the tidying up — tells the user nothing new.
+                pass
             self.device = None
+        self._set_framing(False)
         self.closed.emit()
 
     @Slot(object, int)
@@ -184,15 +200,28 @@ class DeviceWorker(QObject):
             self.progress.emit("", 0)
 
     def _wait(self, label: str) -> None:
-        """Poll until the device stops running, letting queued pause/abort calls through in between."""
+        """Poll until the device stops running, letting queued pause/abort calls through in between.
+
+        A machine that has just been handed a job still reports itself idle for a moment, so the first
+        reply is not an answer yet — waiting for it to say *running* once is what keeps that gap from
+        reading as "already finished". Without it a two-layer document uploads its second layer on top of
+        a job that is still burning, and the panel frees its buttons while the head is moving.
+
+        A paused device has not finished either; only idle, offline or an error end the wait.
+        """
+        started = False
+        waited_ms = 0
         while not self._stop:
             state = self.device.status()
             self.status.emit(state)
-            if state.state is not DeviceState.RUNNING:
+            if state.state in _ACTIVE:
+                started = True
+            elif started or waited_ms >= START_TIMEOUT_MS:
                 return
             self.progress.emit(f"engraving {label}", state.progress)
             QCoreApplication.processEvents()
-            QThread.msleep(200)
+            QThread.msleep(WAIT_STEP_MS)
+            waited_ms += WAIT_STEP_MS
 
     @Slot(bool)
     def pause(self, paused: bool) -> None:
@@ -208,7 +237,14 @@ class DeviceWorker(QObject):
     def _poll(self) -> None:
         if self.device is None or self._busy:
             return  # while a job runs, the wait loop reports the state
-        status = self.device.status()
+        try:
+            status = self.device.status()
+        except Exception as error:
+            # The link died — a cable was pulled, a BLE session dropped. Left unhandled this raises out
+            # of the timer's slot once a second while the panel keeps claiming the device is fine.
+            self.failed.emit(str(error))
+            self.close_device()
+            return
         self.status.emit(status)
         if not self._framing:
             return
@@ -231,6 +267,9 @@ class DevicePanel(QWidget):
     engrave_requested = Signal(object, str)
     pause_requested = Signal(bool)
     abort_requested = Signal()
+
+    ready_changed = Signal(bool)
+    """Whether a job may be started right now — the window's Frame and Engrave actions follow it."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -453,9 +492,12 @@ class DevicePanel(QWidget):
         self._update_buttons()
 
     def _show_status(self, status: DeviceStatus) -> None:
+        if self._framing and status.state is not DeviceState.ERROR:
+            # The panel names what was started; the device only ever knows it is "running" — and for the
+            # first poll after the command, not even that. An error is the one thing worth interrupting
+            # the label for.
+            return
         self.state_dot.setStyleSheet(f"color: {_COLOUR[status.state]}")
-        if self._framing and status.state is DeviceState.RUNNING:
-            return  # the poll would overwrite "framing" with the device's own word for it
         self.state_text.setText(f"{status.state.value} {status.message}".strip())
 
     def _show_progress(self, label: str, percent: int) -> None:
@@ -474,7 +516,11 @@ class DevicePanel(QWidget):
         self._busy = busy
         self._update_buttons()
         if not busy:
+            # Reset without emitting: the toggle would otherwise send a resume to a machine that has
+            # just finished, which is not the no-op it looks like.
+            self.pause_button.blockSignals(True)
             self.pause_button.setChecked(False)
+            self.pause_button.blockSignals(False)
 
     def _set_framing(self, framing: bool) -> None:
         self._framing = framing
@@ -496,3 +542,5 @@ class DevicePanel(QWidget):
         self.connect_button.setEnabled(not self._busy)
         # One writer per link: a scan on the worker thread would sit in front of the next status poll.
         self.scan_button.setEnabled(not self._connected)
+        # The window's toolbar has the same two actions and no way of knowing any of this.
+        self.ready_changed.emit(idle)

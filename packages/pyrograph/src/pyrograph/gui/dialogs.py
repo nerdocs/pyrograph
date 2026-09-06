@@ -56,6 +56,14 @@ class _Dialog(QDialog):
         return super().exec()
 
 
+def _filled(parent, title: str, text: str, message: str) -> bool:
+    """Whether there is anything to work with. An empty field that places nothing has to say why."""
+    if text.strip():
+        return True
+    QMessageBox.information(parent, title, message)
+    return False
+
+
 def ask_text(parent, at: Point) -> DocumentObject | None:
     """A line of text in a chosen family, placed with its baseline at ``at``."""
     dialog = _Dialog(parent, "Text")
@@ -65,7 +73,9 @@ def ask_text(parent, at: Point) -> DocumentObject | None:
     dialog.form.addRow("Text", content)
     dialog.form.addRow("Font", family)
     dialog.form.addRow("Height", size)
-    if dialog.exec() != QDialog.DialogCode.Accepted or not content.text():
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    if not _filled(parent, "Text", content.text(), "Nothing to place — the text is empty."):
         return None
 
     path = fonts.path_for(family.currentFont().family())
@@ -96,9 +106,15 @@ def ask_qr(parent, at: Point) -> DocumentObject | None:
     dialog.form.addRow("Content", content)
     dialog.form.addRow("Size", size)
     dialog.form.addRow("Error correction", error)
-    if dialog.exec() != QDialog.DialogCode.Accepted or not content.text():
+    if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
-    obj = qr_code(content.text(), size.value(), "LMQH"[error.currentIndex()])
+    if not _filled(parent, "QR code", content.text(), "Nothing to encode — the content is empty."):
+        return None
+    try:
+        obj = qr_code(content.text(), size.value(), "LMQH"[error.currentIndex()])
+    except Exception as problem:  # more content than any QR version at this level can hold
+        QMessageBox.warning(parent, "QR code", str(problem))
+        return None
     obj.transform = Transform.translate(at.x, at.y)
     return obj
 
@@ -114,7 +130,9 @@ def ask_barcode(parent, at: Point) -> DocumentObject | None:
     dialog.form.addRow("Symbology", symbology)
     dialog.form.addRow("Width", width)
     dialog.form.addRow("Height", height)
-    if dialog.exec() != QDialog.DialogCode.Accepted or not content.text():
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    if not _filled(parent, "Barcode", content.text(), "Nothing to encode — the content is empty."):
         return None
     try:
         obj = barcode(content.text(), symbology.currentText(), width.value(), height.value())

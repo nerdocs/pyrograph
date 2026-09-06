@@ -51,3 +51,11 @@
 - BLE chunk size follows the negotiated ATT MTU, capped at the vendor's 179 — a longer write is rejected outright.
 - Bluetooth scan in the device panel: it runs on the worker thread and offers what it found, without connecting.
 - Dialogs open with the cursor in their first field; the OK button used to take the keyboard and swallow typing.
+- A job waits for the machine to report itself running; the first idle reply used to count as "finished".
+- A dead link is reported and the connection closed, instead of the status poll raising once a second.
+- An image the platform cannot decode is marked on the canvas; it used to make every redraw, and undo, fail.
+- Frame and Engrave follow the connection state, and live in a Device menu as well as on the toolbar.
+- Locked objects can no longer be selected, moved, scaled or deleted.
+- Shift extends a rubber-band selection instead of replacing it.
+- New in the File menu, and opening or importing asks before it discards unsaved work.
+- Undoing every change marks the document unmodified again; a malformed SVG reports itself as a bad import.

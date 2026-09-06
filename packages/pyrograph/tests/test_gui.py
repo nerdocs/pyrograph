@@ -17,7 +17,15 @@ from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QMouseEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
-from pyrograph.document import Document, ImageObject, Layer, Path, PathObject, Point  # noqa: E402
+from pyrograph.document import (  # noqa: E402
+    AddObject,
+    Document,
+    ImageObject,
+    Layer,
+    Path,
+    PathObject,
+    Point,
+)
 from pyrograph.gui import arrange  # noqa: E402
 from pyrograph.gui.device import DevicePanel  # noqa: E402
 from pyrograph.gui.tools import SelectTool, ShapeTool  # noqa: E402
@@ -94,8 +102,10 @@ def test_engraving_runs_against_the_mock_device(app, window):
     assert _pump(app, lambda: panel._connected), "the mock device never connected"
 
     panel.engrave_requested.emit(window.document, "test")
-    assert _pump(app, lambda: panel.worker._busy), "the job never started"
-    assert _pump(app, lambda: not panel.worker._busy), "the job never finished"
+    assert _pump(app, lambda: panel._busy), "the job never started"
+    # Wait for the panel, not for the worker's own flag: the two are a queued signal apart, and what is
+    # being asserted below is what the panel shows.
+    assert _pump(app, lambda: not panel._busy), "the job never finished"
     assert panel.engrave_button.isEnabled()
 
     panel.close_requested.emit()
@@ -330,6 +340,123 @@ def test_disconnecting_stops_the_machine_first(app, window):
     assert _pump(app, lambda: not panel._connected)
     assert stopped == [True]
     assert not panel._framing
+
+
+def test_a_job_is_not_over_before_the_machine_has_started(app):
+    """A device still reports itself idle for a moment after it has been handed a job.
+
+    Reading that first reply as "finished" frees the panel while the head is moving and uploads the next
+    layer on top of one that is still burning. A paused machine has not finished either.
+    """
+    from pyrograph.devices import DeviceState, DeviceStatus
+    from pyrograph.gui.device import DeviceWorker
+
+    class Slow:
+        """Idle twice, then running, with a pause in the middle."""
+
+        def __init__(self):
+            self.polls = 0
+
+        def status(self):
+            self.polls += 1
+            if self.polls <= 2:
+                return DeviceStatus(DeviceState.IDLE)
+            if self.polls == 4:
+                return DeviceStatus(DeviceState.PAUSED)
+            if self.polls <= 8:
+                return DeviceStatus(DeviceState.RUNNING, progress=self.polls * 10)
+            return DeviceStatus(DeviceState.IDLE)
+
+    worker = DeviceWorker()
+    worker.device = Slow()
+    worker._wait("Layer")
+    assert worker.device.polls == 9, "the wait ended before the device did"
+
+
+def test_an_undecodable_image_does_not_break_the_redraw(drawing):
+    """A rebuild that raises takes undo down with it — there is no way out of the document again."""
+    drawing.apply(AddObject(0, ImageObject(data=b"not an image", width_mm=10.0, height_mm=10.0)))
+    assert len(drawing.canvas.scene().items()) == 3, "the broken image is marked, not skipped"
+    drawing.undo()
+    assert not drawing.document.layers[0].objects
+
+
+def test_a_locked_object_cannot_be_selected(drawing):
+    locked = PathObject(path=Path.rect(10, 10, 20, 20), locked=True)
+    drawing.apply(AddObject(0, locked))
+    drawing.canvas.select_all()
+    assert locked.id not in drawing.canvas.selection
+    drawing.canvas.set_selection([locked.id])
+    assert drawing.canvas.selection == []
+
+
+def test_shift_extends_a_band_selection(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (10, 10), (30, 30))
+    _drag(drawing.canvas, (60, 60), (80, 80))
+    first, second = drawing.document.layers[0].objects
+
+    drawing.canvas.set_tool(SelectTool())
+    _drag(drawing.canvas, (5, 5), (40, 40))
+    assert drawing.canvas.selection == [first.id]
+    _drag(drawing.canvas, (50, 50), (90, 90), Qt.KeyboardModifier.ShiftModifier)
+    assert set(drawing.canvas.selection) == {first.id, second.id}
+
+
+def test_undoing_every_change_makes_the_document_clean_again(drawing):
+    drawing.canvas.set_tool(ShapeTool("rect", "Rectangle"))
+    _drag(drawing.canvas, (20, 20), (40, 40))
+    assert drawing.dirty
+    drawing.undo()
+    assert not drawing.dirty, "there is nothing left to save"
+    assert "*" not in drawing.windowTitle()
+
+
+def test_frame_and_engrave_follow_the_connection(app, window):
+    """The panel's buttons know when a job may start; the menu and the toolbar have to be told."""
+    panel = window.device
+    assert not window.act_frame.isEnabled()
+    assert not window.act_engrave.isEnabled()
+
+    panel.open_requested.emit("mock", "")
+    assert _pump(app, lambda: window.act_engrave.isEnabled()), "still greyed out while connected"
+
+    panel.close_requested.emit()
+    assert _pump(app, lambda: not window.act_engrave.isEnabled())
+
+
+def test_a_dead_link_is_reported_rather_than_raised(app, monkeypatch, window):
+    """Left unhandled the poll raises out of its timer once a second, and the panel keeps saying idle."""
+    panel = window.device
+    panel.open_requested.emit("mock", "")
+    assert _pump(app, lambda: panel._connected)
+
+    class Dead:
+        def status(self):
+            raise RuntimeError("cable pulled")
+
+        def stop_frame(self):
+            raise RuntimeError("cable pulled")
+
+        def close(self):
+            raise RuntimeError("cable pulled")
+
+    said: list[str] = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda _p, _t, text: said.append(text))
+    # Let the worker's own poll timer find it, on the worker's own thread — the path a pulled cable takes.
+    panel.worker.device = Dead()
+    assert _pump(app, lambda: not panel._connected), "a dead link left the panel connected"
+    assert any("cable pulled" in text for text in said)
+
+
+def test_a_malformed_svg_reports_itself_as_a_bad_import(tmp_path):
+    """ElementTree's own exception would walk straight past the importer's error type."""
+    from pyrograph.document import SvgImportError, import_svg
+
+    broken = tmp_path / "broken.svg"
+    broken.write_text("<svg><rect")
+    with pytest.raises(SvgImportError):
+        import_svg(broken)
 
 
 @pytest.fixture

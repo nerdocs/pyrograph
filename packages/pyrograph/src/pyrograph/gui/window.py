@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path as FilePath
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -69,6 +69,7 @@ class MainWindow(QMainWindow):
 
         self.layers.changed.connect(self._changed)
         self.layers.current_changed.connect(self._layer_selected)
+        self.device.ready_changed.connect(self._device_ready)
         self.canvas.edit_requested.connect(self.apply)
         self.canvas.selection_changed.connect(self._selection_changed)
         self.canvas.cursor_moved.connect(self._show_position)
@@ -98,6 +99,7 @@ class MainWindow(QMainWindow):
 
     def _build_actions(self) -> None:
         keys = QKeySequence.StandardKey
+        self.act_new = self._action("&New", self.new_file, keys.New, icons.themed("document-new"))
         self.act_open = self._action("&Open…", self.open_file, keys.Open, icons.themed("document-open"))
         self.act_import = self._action("&Import SVG…", self.import_drawing)
         self.act_save = self._action("&Save", self.save, keys.Save, icons.themed("document-save"))
@@ -114,6 +116,9 @@ class MainWindow(QMainWindow):
 
         self.act_frame = self._action("&Frame", self.device.frame)
         self.act_engrave = self._action("&Engrave", self.device.engrave)
+        # Nothing is connected yet; the panel says when that changes.
+        self.act_frame.setEnabled(False)
+        self.act_engrave.setEnabled(False)
         self.act_fit = self._action("&Fit to window", self.canvas.fit, "Ctrl+0")
 
         self._selection_actions = [
@@ -124,7 +129,7 @@ class MainWindow(QMainWindow):
 
     def _build_menus(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
-        file_menu.addActions([self.act_open, self.act_import])
+        file_menu.addActions([self.act_new, self.act_open, self.act_import])
         file_menu.addSeparator()
         file_menu.addActions([self.act_save, self.act_save_as])
         file_menu.addSeparator()
@@ -159,6 +164,11 @@ class MainWindow(QMainWindow):
         modify.addSeparator()
         modify.addAction(self._action("Duplicate as a&rray…", self._array))
 
+        # Also in the menu, not only on the toolbar: a hidden toolbar must not take the two actions that
+        # reach the machine with it.
+        device = self.menuBar().addMenu("&Device")
+        device.addActions([self.act_frame, self.act_engrave])
+
         view = self.menuBar().addMenu("&View")
         view.addAction(self.act_fit)
         grid = view.addMenu("&Grid")
@@ -184,7 +194,7 @@ class MainWindow(QMainWindow):
     def _build_toolbars(self) -> None:
         bar = QToolBar("Main", self)
         bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        bar.addActions([self.act_open, self.act_save])
+        bar.addActions([self.act_new, self.act_open, self.act_save])
         bar.addSeparator()
         bar.addActions([self.act_cut, self.act_copy, self.act_paste, self.act_delete])
         bar.addSeparator()
@@ -195,16 +205,30 @@ class MainWindow(QMainWindow):
 
         palette = QToolBar("Tools", self)
         palette.setOrientation(Qt.Orientation.Vertical)
-        colour = self.palette().text().color()
         group = QActionGroup(self)
+        self._tool_actions: list[tuple[QAction, str]] = []
         for tool in build_tools():
-            action = QAction(icons.tool_icon(tool.name, colour), tool.label, self, checkable=True)
+            action = QAction(tool.label, self, checkable=True)
             action.setToolTip(tool.label)
             action.triggered.connect(lambda _=False, t=tool: self.canvas.set_tool(t))
             action.setChecked(tool.name == self.canvas.tool.name)
             group.addAction(action)
             palette.addAction(action)
+            self._tool_actions.append((action, tool.name))
+        self._draw_tool_icons()
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, palette)
+
+    def _draw_tool_icons(self) -> None:
+        """Redraw the pictograms in the palette's text colour. They are drawn, not shipped, so a theme
+        switch has to be answered here instead of by a second set of files."""
+        colour = self.palette().text().color()
+        for action, name in self._tool_actions:
+            action.setIcon(icons.tool_icon(name, colour))
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() is QEvent.Type.PaletteChange:
+            self._draw_tool_icons()
 
     def _build_status_bar(self) -> None:
         self._position = QLabel("")
@@ -214,11 +238,15 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ document
 
+    @property
+    def dirty(self) -> bool:
+        """Whether the document differs from what is on disk. Undoing every change clears it again."""
+        return not self.undo_stack.is_clean
+
     def _set_document(self, document: Document, path: str | None) -> None:
         self.document = document
         self.undo_stack = UndoStack(document)
         self.path = path
-        self.dirty = False
         self.canvas.set_document(document)
         self.layers.set_document(document, self.undo_stack)
         self.device.set_document(document)
@@ -232,7 +260,6 @@ class MainWindow(QMainWindow):
         self._changed()
 
     def _changed(self) -> None:
-        self.dirty = True
         self.canvas.rebuild()
         self.layers.reload()
         self._refresh()
@@ -273,6 +300,11 @@ class MainWindow(QMainWindow):
 
     def _layer_selected(self, index: int) -> None:
         self.canvas.target_layer = max(0, index)
+
+    def _device_ready(self, ready: bool) -> None:
+        """The panel's own buttons know this; the menu and the toolbar have to be told."""
+        self.act_frame.setEnabled(ready)
+        self.act_engrave.setEnabled(ready)
 
     def copy(self) -> None:
         self._clipboard = [self.document.object(i).clone() for i in self.canvas.selection]
@@ -339,7 +371,33 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ files
 
+    def _confirm_discard(self) -> bool:
+        """Ask before unsaved work is thrown away. ``False`` means the user changed their mind.
+
+        Opening and importing replace the whole document, so they need the same question closing does —
+        without it, one wrong menu entry silently ends an hour of work.
+        """
+        if not self.dirty:
+            return True
+        answer = QMessageBox.question(
+            self,
+            "pyrograph",
+            "The document has unsaved changes.",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+        )
+        if answer is QMessageBox.StandardButton.Cancel:
+            return False
+        return answer is not QMessageBox.StandardButton.Save or self.save()
+
+    def new_file(self) -> None:
+        if self._confirm_discard():
+            self._set_document(Document(), None)
+
     def open_file(self) -> None:
+        if not self._confirm_discard():
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Open", "", "pyrograph documents (*.pyg)")
         if path:
             self._load(path)
@@ -354,6 +412,8 @@ class MainWindow(QMainWindow):
 
     def import_drawing(self) -> None:
         """Replace the document with an imported SVG. Merging into the open one comes later."""
+        if not self._confirm_discard():
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Import SVG", "", "SVG drawings (*.svg)")
         if not path:
             return
@@ -363,7 +423,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Import SVG", f"{path}:\n{error}")
             return
         self._set_document(result.document, None)
-        self.dirty = True
+        # An import has no history to undo back to; it is unsaved work from the first moment.
+        self.undo_stack.mark_dirty()
         self._refresh()
         if result.skipped:
             QMessageBox.information(
@@ -378,7 +439,7 @@ class MainWindow(QMainWindow):
         except OSError as error:
             QMessageBox.critical(self, "Save", f"{self.path}:\n{error}")
             return False
-        self.dirty = False
+        self.undo_stack.mark_clean()
         self._refresh()
         return True
 
@@ -386,23 +447,18 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save as", "", "pyrograph documents (*.pyg)")
         if not path:
             return False
+        previous = self.path
         self.path = path if path.endswith(".pyg") else path + ".pyg"
-        return self.save()
+        if self.save():
+            return True
+        # A save that failed must not leave the window named after a file that was never written.
+        self.path = previous
+        self._refresh()
+        return False
 
     def closeEvent(self, event) -> None:
-        if self.dirty:
-            answer = QMessageBox.question(
-                self,
-                "pyrograph",
-                "The document has unsaved changes.",
-                QMessageBox.StandardButton.Save
-                | QMessageBox.StandardButton.Discard
-                | QMessageBox.StandardButton.Cancel,
-            )
-            if answer is QMessageBox.StandardButton.Cancel or (
-                answer is QMessageBox.StandardButton.Save and not self.save()
-            ):
-                event.ignore()
-                return
+        if not self._confirm_discard():
+            event.ignore()
+            return
         self.device.shutdown()
         event.accept()
