@@ -70,7 +70,15 @@ class LaserDevice(Protocol):
     def status(self) -> DeviceStatus: ...
 
     def frame(self, bounds: Rect, power: int = 1) -> None:
-        """Trace a bounding box with the laser at low power, so the workpiece can be aligned."""
+        """Trace a bounding box with the laser at low power, so the workpiece can be aligned.
+
+        Returns as soon as the device has been told to start. Tracing then repeats until
+        :meth:`stop_frame` ends it — the point is to leave the outline visible while the workpiece is
+        being moved into place.
+        """
+
+    def stop_frame(self) -> None:
+        """Stop tracing. Safe to call when nothing is being traced."""
 
     def run(self, job: RasterJob, name: str = "pyrograph", progress=None) -> None: ...
 

@@ -67,8 +67,9 @@
 - No layer management: layers cannot be added, renamed, reordered or deleted, and objects cannot be
   moved between them, so `MoveObject` has no GUI at all.
 - No properties panel: an object's exact position and size can only be dragged, not typed in.
-- Frame runs at power 1, hard-coded. No focus/Z control, no rotary UI, no device settings dialog —
-  the declarative settings from `docs/architecture.md` are not built.
+- Frame runs at power 1, hard-coded, and always traces the whole document, never the selection.
+- No focus/Z control, no rotary UI, no device settings dialog — the declarative settings from
+  `docs/architecture.md` are not built.
 - Engraving hands the worker a deep copy; a second job cannot be queued while one runs (no spooler).
 - The device profile is not read by the canvas: the work area comes from the document, so a document
   larger than the machine bed is not flagged.

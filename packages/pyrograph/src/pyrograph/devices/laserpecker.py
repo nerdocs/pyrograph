@@ -62,6 +62,9 @@ class LaserPeckerDevice:
     def frame(self, bounds: Rect, power: int = 1) -> None:
         self.driver.preview(bounds.x, bounds.y, bounds.width, bounds.height, power)
 
+    def stop_frame(self) -> None:
+        self.driver.preview_stop()
+
     def run(self, job: RasterJob, name: str = "pyrograph", progress=None) -> None:
         """Upload the raster and start engraving. Returns once the device has taken the job."""
         from laserpecker.imaging import file_id_from_name

@@ -12,9 +12,9 @@ Qt Widgets (PySide6), started with `pyrograph-gui [file.pyg]`.
 │ ╱ │ ☑ Photo (1)   │0│  ▣▣  ▌▌▌▌▌▌▌▌         │   │ ───────────────── │
 │ ▭ │               │ │                       │   │ Job               │
 │ ○ │ Laser params  │2│  ┌──▫────▫──┐         │   │  ● idle           │
-│ ∿ │  power, depth │0│  ▫  selected ▫        │   │  Frame            │
+│ ∿ │  power, depth │0│  ▫  selected ▫        │   │  Frame     Stop   │
 │ ⬠ │  passes,speed │ │  └──▫────▫──┘         │   │  Engrave          │
-│ T │  dpi, line w. │4│                       │   │  Pause   Abort    │
+│ T │  dpi, line w. │4│                       │   │  Pause     Abort  │
 │ ▩ │               │0└────────────────────────┘   │                   │
 │ ▌▌│               │                              │                   │
 ├───┴───────────────┴──────────────────────────────┴───────────────────┤
@@ -55,12 +55,14 @@ about; on release, one `CommandGroup` describes the whole thing. Moving three ob
 
 | Tool | What it does |
 | --- | --- |
-| Select | Click to select, Shift-click to add, drag to move, drag a handle to scale, drag the background to rubber-band select. Shift while scaling a corner keeps the proportions |
+| Select | Click to select, Shift-click to add, drag to move, a handle to scale, the background to band-select |
 | Pan | Drag the view |
 | Line, Rectangle, Ellipse | Drag out the shape |
 | Polyline, Polygon | Click point after point; double-click or Enter finishes, Escape discards |
 | Text | Click, then choose the content, family and height |
 | QR code, Barcode | Click, then enter the content and size |
+
+Shift while dragging a corner handle keeps the proportions.
 
 Adding a tool is a class in `gui/tools.py` and one line in `build_tools()` — the canvas has no branch per
 tool. A tool only receives millimetres and asks the canvas for a preview, a ghost outline or an edit.
@@ -119,6 +121,12 @@ Engraving hands the worker a deep copy of the document. Rasterising a large imag
 way it happens on the worker thread while the document stays editable.
 
 An idle device is polled once a second; while a job runs, the wait loop reports the state instead.
+
+**Framing has to be stopped.** Tracing the outline is not a one-shot command — the device repeats it until
+told otherwise, which is the point: the outline stays visible while the workpiece is moved into place. So
+*Frame* is paired with *Stop*, and while it runs everything else is out of reach, because the head is
+moving. Disconnecting stays available and sends the stop on the way out; closing the port on its own would
+leave the machine tracing with nobody left to tell it otherwise.
 
 ## Not there yet
 

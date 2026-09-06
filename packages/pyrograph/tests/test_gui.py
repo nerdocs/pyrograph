@@ -260,3 +260,40 @@ def test_the_place_dialogs_hand_back_a_positioned_object(app, monkeypatch):
         assert obj is not None, kind
         assert obj.fill, kind
         assert obj.bounds().x == pytest.approx(12.0, abs=1.0), kind
+
+
+def test_framing_runs_until_it_is_stopped(app, window):
+    panel = window.device
+    panel.open_requested.emit("mock", "")
+    assert _pump(app, lambda: panel._connected)
+    assert not panel.stop_button.isEnabled(), "nothing to stop yet"
+
+    panel.frame()
+    assert _pump(app, lambda: panel._framing), "framing never started"
+    assert panel.stop_button.isEnabled()
+    assert not panel.frame_button.isEnabled(), "the machine is already tracing"
+    assert not panel.engrave_button.isEnabled(), "the head is moving"
+    assert panel.state_text.text() == "framing"
+
+    panel.stop_frame()
+    assert _pump(app, lambda: not panel._framing), "framing never stopped"
+    assert panel.frame_button.isEnabled()
+    assert not panel.stop_button.isEnabled()
+
+
+def test_disconnecting_stops_the_machine_first(app, window):
+    """Closing the port leaves the device tracing with nobody left to tell it otherwise."""
+    panel = window.device
+    panel.open_requested.emit("mock", "")
+    assert _pump(app, lambda: panel._connected)
+    panel.frame()
+    assert _pump(app, lambda: panel._framing)
+
+    stopped = []
+    device = panel.worker.device
+    device.stop_frame = lambda: stopped.append(True)
+
+    panel.close_requested.emit()
+    assert _pump(app, lambda: not panel._connected)
+    assert stopped == [True]
+    assert not panel._framing
