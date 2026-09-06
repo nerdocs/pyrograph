@@ -55,6 +55,10 @@ class ImageObject(DocumentObject):
 
     ``data`` holds the *original* encoded image (PNG), byte for byte as it entered the document, so a
     round trip through the file format is lossless.
+
+    The two sizes are the rectangle *before* ``transform``, like every other object's local geometry. With
+    the usual identity transform they are the size on the workpiece; an import that carries a scale in the
+    transform is the exception, and :meth:`bounds` accounts for it either way.
     """
 
     data: bytes = b""

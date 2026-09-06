@@ -34,3 +34,6 @@ vendor/
 *.asar
 *.exe
 *.dmg
+
+# Local, uncommitted
+CLAUDE.local.md

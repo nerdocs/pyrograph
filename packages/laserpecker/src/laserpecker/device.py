@@ -177,12 +177,14 @@ class LaserPecker:
         times: int = 1,
         px: int = 4,
         packed: bool = False,
+        brightness: float = 0.0,
+        contrast: float = 0.0,
         name: str = "claude",
         progress=None,
     ) -> int:
         """Dither, upload and start an engraving job. Returns the file ID."""
         dpi = LP2_DPI[px]
-        raster = image_to_raster(image, width_mm, dpi, packed=packed)
+        raster = image_to_raster(image, width_mm, dpi, packed=packed, brightness=brightness, contrast=contrast)
         file_id = file_id_from_name(name)
         self.upload_raster(raster, file_id, x_mm, y_mm, dpi, px, name, progress)
 

@@ -16,11 +16,9 @@
 
 ## Driver
 
-- **No image pre-processing.** The vendor pipeline takes brightness, contrast and invert before dithering
-  (`image_to_dither_stream(data, w, h, brightness, contrast, inverse, …)`); `image_to_raster` only has
-  `inverse`. Without those, a photograph cannot be brought into a usable range no matter how good the dither
-  is. Add them, plus a preview of the dithered result so the settings can be judged before burning.
 - Dithering runs in pure Python; large images need a vectorised (numpy) path.
+- `adjust_levels` uses the conventional brightness/contrast formula; the vendor's arithmetic sits in WASM
+  and could not be read, so the two will not match pixel for pixel.
 - The dither result differs from the vendor WASM on roughly 30 % of pixels on a grey ramp (same packing,
   different threshold decision). Cosmetic, documented.
 - CLI lacks `delete` (file removal) and a way to engrave an already uploaded file ID.
@@ -34,6 +32,8 @@
   USB-stick export with no importer in the vendor software, and the editable format is `.lp2` (ZIP with
   fabric.js objects). Neither is implemented. `.lpb` export is worth having, `.lp2` import needs a sample
   file to work against. Layout of both is in `docs/document-model.md`.
-- No SVG import for foreign files — the path parser only reads back what we write.
+- SVG import handles shapes, arcs, nested transforms and units; `text`, `use`, clipping, masks and
+  gradients are skipped and reported. Rounded rectangle corners are ignored.
+- No DXF import.
 - `TextObject` needs a font file path; no lookup by family name, no kerning.
 - Everything else: editor, device abstraction, spooler, GUI.

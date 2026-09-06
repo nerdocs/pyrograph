@@ -100,12 +100,32 @@ def cmd_engrave(args) -> int:
             times=args.times,
             px=args.px,
             packed=args.packed,
+            brightness=args.brightness,
+            contrast=args.contrast,
             name=args.name,
             progress=show,
         )
         print()
         device.wait_until_done(lambda s: print(f"\rengraving {s.rate}%", end="", flush=True))
         print("\ndone")
+    return 0
+
+
+def cmd_dither(args) -> int:
+    """Render what the device would burn, without a device — for judging brightness and contrast."""
+    from PIL import Image
+
+    from .imaging import image_to_raster, raster_to_image
+
+    raster = image_to_raster(
+        Image.open(args.image),
+        args.width,
+        LP2_DPI[args.px],
+        brightness=args.brightness,
+        contrast=args.contrast,
+    )
+    raster_to_image(raster).save(args.output)
+    print(f"{args.output}: {raster.width}x{raster.height} px")
     return 0
 
 
@@ -142,8 +162,19 @@ def main(argv: list[str] | None = None) -> int:
     engrave.add_argument("--times", type=int, default=1)
     engrave.add_argument("--px", type=int, choices=sorted(LP2_DPI), default=4)
     engrave.add_argument("--packed", action="store_true", help="send 1 bit per pixel")
+    engrave.add_argument("--brightness", type=float, default=0.0, help="-100..100, applied before dithering")
+    engrave.add_argument("--contrast", type=float, default=0.0, help="-100..100, applied before dithering")
     engrave.add_argument("--name", default="claude")
     engrave.set_defaults(func=cmd_engrave)
+
+    preview_dither = sub.add_parser("dither", help="write the dithered result as a PNG, without engraving")
+    preview_dither.add_argument("image")
+    preview_dither.add_argument("output")
+    preview_dither.add_argument("--width", type=float, default=30.0, help="physical width in mm")
+    preview_dither.add_argument("--px", type=int, choices=sorted(LP2_DPI), default=4)
+    preview_dither.add_argument("--brightness", type=float, default=0.0, help="-100..100")
+    preview_dither.add_argument("--contrast", type=float, default=0.0, help="-100..100")
+    preview_dither.set_defaults(func=cmd_dither)
 
     args = parser.parse_args(argv)
     return args.func(args)

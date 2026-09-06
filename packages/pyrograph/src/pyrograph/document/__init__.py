@@ -10,6 +10,7 @@ from .geometry import Close, CubicTo, LineTo, MoveTo, Path, Point, Rect, Transfo
 from .layer import LaserParams, Layer
 from .objects import DocumentObject, ImageObject, PathObject, TextObject, new_id
 from .serialize import load_pyg, save_pyg
+from .svg import SvgImport, SvgImportError, import_svg
 
 __all__ = [
     "AddObject",
@@ -30,9 +31,12 @@ __all__ = [
     "Rect",
     "RemoveObject",
     "SetLayerParams",
+    "SvgImport",
+    "SvgImportError",
     "TextObject",
     "Transform",
     "UndoStack",
+    "import_svg",
     "load_pyg",
     "new_id",
     "save_pyg",

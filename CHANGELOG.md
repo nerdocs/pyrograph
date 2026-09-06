@@ -23,3 +23,6 @@
 - Native `.pyg` container: standard SVG for geometry, JSON for parameters, original bitmaps kept lossless.
 - Job creation turns a layer into a dithered raster at its own DPI, with the origin in device pixels.
 - `.lpb` identified as a baked USB-stick export, not a project format; the editable vendor format is `.lp2`.
+- SVG import: shapes, full path grammar including arcs, nested transforms, units and inline images.
+- Brightness and contrast before dithering, so a photograph can be brought into a burnable range.
+- `laserpecker dither` writes the dithered result as a PNG, to judge the settings without a device.

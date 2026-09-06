@@ -65,9 +65,27 @@ On reading, the JSON wins and the outline is regenerated.
 
 Two consequences of the current implementation:
 
-* The path parser reads back what we write — absolute `M`, `L`, `C`, `Z`. Importing arbitrary foreign SVG
-  needs a fuller parser and is a separate concern.
+* The container's own reader only accepts what its writer emits — absolute `M`, `L`, `C`, `Z`. Foreign SVG
+  goes through the importer below instead, which is deliberately a separate piece of code: a reader that
+  has to cope with arcs and nested transforms has no business constraining the writer.
 * `preview.png` is not written. Nothing consumes it yet; a reader ignores unknown members anyway.
+
+## Importing foreign SVG
+
+`pyrograph.document.import_svg(source)` reads someone else's SVG into a document with one layer and
+returns an `SvgImport` — the document plus the tag names it did not understand, so nothing disappears
+without a trace.
+
+Units are the point of the exercise. `width`/`height` give the physical size, `viewBox` gives the
+coordinate system, and the ratio between them is the scale. Without a `viewBox`, user units are CSS pixels
+(1 px = 1/96 in); without any size at all, the content defines the work area. Group transforms are
+composed and baked into the coordinates, so after an import everything is plain millimetres.
+
+Understood: `path` (the full grammar — relative commands, shorthands, elliptical arcs), `rect`, `circle`,
+`ellipse`, `line`, `polyline`, `polygon`, `image` (data URI or a file next to the SVG), and `g` nesting.
+
+Not understood, and reported in `skipped`: `text` (would need to resolve a font by family name — the GUI's
+job), `use`, clipping, masks, gradients. Rounded rectangle corners are ignored.
 
 ## Job creation
 
