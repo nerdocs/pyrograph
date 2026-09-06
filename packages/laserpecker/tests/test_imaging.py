@@ -2,7 +2,13 @@
 
 from PIL import Image
 
-from laserpecker.imaging import adjust_levels, image_to_raster, raster_to_image
+from laserpecker.imaging import (
+    Raster,
+    adjust_levels,
+    file_id_for_raster,
+    image_to_raster,
+    raster_to_image,
+)
 
 
 def test_neutral_settings_change_nothing():
@@ -54,3 +60,26 @@ def test_packed_and_plain_previews_agree():
     packed = raster_to_image(image_to_raster(source, width_mm=3.2, dpi=254.0, packed=True))
 
     assert plain.tobytes() == packed.tobytes()
+
+
+def test_the_file_id_follows_the_content_not_the_name():
+    """The bug this guards: the device keeps one file per ID and burns the one it already has.
+
+    A host that derives the ID from a job name uploads every new image under the same ID, and the print
+    starts the previous motif instead. Measured on hardware.
+    """
+    first = Raster(width=2, height=2, payload=bytes([0, 255, 255, 0]), packed=False)
+    second = Raster(width=2, height=2, payload=bytes([255, 0, 0, 255]), packed=False)
+
+    assert file_id_for_raster(first, 0, 0, 4, 254.0) != file_id_for_raster(second, 0, 0, 4, 254.0)
+    assert file_id_for_raster(first, 0, 0, 4, 254.0) == file_id_for_raster(first, 0, 0, 4, 254.0)
+
+
+def test_moving_or_rescaling_an_image_changes_the_file_id():
+    """Position and resolution go into the stored header, so they are part of the file's identity."""
+    raster = Raster(width=2, height=2, payload=bytes([0, 255, 255, 0]), packed=False)
+    at_origin = file_id_for_raster(raster, 0, 0, 4, 254.0)
+
+    assert file_id_for_raster(raster, 100, 0, 4, 254.0) != at_origin
+    assert file_id_for_raster(raster, 0, 100, 4, 254.0) != at_origin
+    assert file_id_for_raster(raster, 0, 0, 2, 508.0) != at_origin

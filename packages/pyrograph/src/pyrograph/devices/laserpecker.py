@@ -67,16 +67,15 @@ class LaserPeckerDevice:
 
     def run(self, job: RasterJob, name: str = "pyrograph", progress=None) -> None:
         """Upload the raster and start engraving. Returns once the device has taken the job."""
-        from laserpecker.imaging import file_id_from_name
-
         px = _PX_FOR_DPI.get(job.dpi)
         if px is None:
             raise ValueError(
                 f"{self.profile.name} cannot engrave at {job.dpi} dpi; "
                 f"use one of {', '.join(str(d) for d in self.profile.dpi_steps)}"
             )
-        file_id = file_id_from_name(name)
-        self.driver.upload_raster(job.raster, file_id, job.x_mm, job.y_mm, job.dpi, px, name, progress)
+        file_id = self.driver.upload_raster(
+            job.raster, job.x_mm, job.y_mm, job.dpi, px, name, progress
+        )
         self.driver.send(
             print_start(
                 file_id=file_id,

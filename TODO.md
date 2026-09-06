@@ -21,7 +21,13 @@
   and could not be read, so the two will not match pixel for pixel.
 - The dither result differs from the vendor WASM on roughly 30 % of pixels on a grey ramp (same packing,
   different threshold decision). Cosmetic, documented.
-- CLI lacks `delete` (file removal) and a way to engrave an already uploaded file ID.
+- CLI lacks `delete` (file removal) and a way to engrave an already uploaded file ID. `delete_file` is
+  built but never sent to a device.
+- **Uploaded files accumulate.** Every distinct image leaves a file on the device, and nothing removes it.
+  The file-ID query answers in a single 133-byte frame, which holds 31 IDs — the captured reply had exactly
+  31, so what happens beyond that, and what the device does when its storage is full, is unknown. Deleting
+  the previous upload before sending the next one is the obvious next step, but the delete command is
+  untested.
 - `MockTransport` answers only what the driver asks for; it is no firmware simulator.
 - Only LP2 device data is present; `DeviceProfile` for other models is not filled in.
 - **Material data, paper, 20 mm motif at 254 dpi:** power 15 / depth 30 leaves nothing at all; power 30 /

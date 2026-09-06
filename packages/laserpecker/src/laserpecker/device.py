@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 
 from . import protocol as p
-from .imaging import Raster, file_id_from_name, image_to_raster
+from .imaging import Raster, file_id_for_raster, image_to_raster
 from .transport import SerialTransport, Transport, TransportError, write_bulk
 
 #: DPI steps LP2 supports, mapped to the ``px`` byte of the raster header.
@@ -121,18 +121,23 @@ class LaserPecker:
     def upload_raster(
         self,
         raster: Raster,
-        file_id: int,
         x_mm: float,
         y_mm: float,
         dpi: float,
         px: int,
         name: str = "",
         progress=None,
-    ) -> None:
-        """Push a dithered image to the device (steps 1–5 of docs/protocol.md §5)."""
+    ) -> int:
+        """Push a dithered image to the device (steps 1–5 of docs/protocol.md §5).
+
+        Returns the file ID to start the print with. The ID comes from the image itself
+        (:func:`~laserpecker.imaging.file_id_for_raster`), because the device stores one file per ID and
+        will keep the one it already has.
+        """
         scale = dpi / 25.4
         nx = max(0, int(x_mm * scale))
         ny = max(0, int(y_mm * scale))
+        file_id = file_id_for_raster(raster, nx, ny, px, dpi)
 
         self.request(p.stop())
 
@@ -165,6 +170,7 @@ class LaserPecker:
         reply = self.transport.read_frame(timeout=60.0)
         if reply is None or p.parse_file_status(reply) != 1:
             raise TransportError("device did not acknowledge the upload")
+        return file_id
 
     def engrave_image(
         self,
@@ -185,8 +191,7 @@ class LaserPecker:
         """Dither, upload and start an engraving job. Returns the file ID."""
         dpi = LP2_DPI[px]
         raster = image_to_raster(image, width_mm, dpi, packed=packed, brightness=brightness, contrast=contrast)
-        file_id = file_id_from_name(name)
-        self.upload_raster(raster, file_id, x_mm, y_mm, dpi, px, name, progress)
+        file_id = self.upload_raster(raster, x_mm, y_mm, dpi, px, name, progress)
 
         scale = dpi / 25.4
         self.send(

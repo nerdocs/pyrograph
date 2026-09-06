@@ -115,8 +115,33 @@ def raster_to_image(raster: Raster):
 def file_id_from_name(name: str) -> int:
     """Derive the 32-bit file ID from a name, mirroring LDS' MD5-based scheme.
 
-    Any stable 32-bit value works; this one just keeps re-uploads of the same name idempotent.
+    This is the vendor's scheme and what "start by name" would need. It is **not** what an upload should
+    use — see :func:`file_id_for_raster` for why.
     """
     import hashlib
 
     return int.from_bytes(hashlib.md5(name.encode("utf-8")).digest()[:4], "big")
+
+
+def file_id_for_raster(raster: Raster, nx: int, ny: int, px: int, dpi: float) -> int:
+    """The file ID an upload should carry: derived from what will be burnt, not from the job's name.
+
+    The device keeps a file per ID and treats the ID as the identity of its content — LDS queries whether
+    an ID is already stored and skips the upload if it is. A host that names its jobs after the layer, or
+    anything else that stays the same between runs, therefore uploads a new image under an ID the device
+    already has, and the next print starts the *old* file. Measured on hardware: the previous motif was
+    engraved a second time and the new one never appeared.
+
+    Hashing the payload and the geometry that goes into the header makes the ID change exactly when the
+    result changes. Sending the same image twice stays idempotent, which is what the vendor's cache
+    expects; sending a different one cannot collide.
+    """
+    import hashlib
+    import struct
+
+    digest = hashlib.md5()
+    digest.update(
+        struct.pack(">HHHHBH?", raster.width, raster.height, nx, ny, px, int(dpi), raster.packed)
+    )
+    digest.update(raster.payload)
+    return int.from_bytes(digest.digest()[:4], "big")

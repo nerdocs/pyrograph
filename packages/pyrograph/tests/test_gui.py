@@ -300,11 +300,28 @@ def test_disconnecting_stops_the_machine_first(app, window):
     assert not panel._framing
 
 
-def test_a_plugged_in_engraver_is_offered(app):
-    """Selected, not connected: opening the port stays the user's move."""
-    panel = DevicePanel()
+@pytest.fixture
+def panel_ports(app):
+    """A device panel whose port list is ours.
+
+    The machine running the tests may well have an engraver plugged in — the panel scans on construction,
+    so its state has to be reset before a test can pretend anything about what is connected.
+    """
     ports: list[str] = []
+    panel = DevicePanel()
+    panel.watcher.stop()
     panel.watcher._ports = lambda: list(ports)
+    panel.watcher._seen = set()
+    panel.mode.setCurrentIndex(panel.mode.findData("mock"))
+    panel.address.clear()
+    panel._picked = False
+    yield panel, ports
+    panel.shutdown()
+
+
+def test_a_plugged_in_engraver_is_offered(panel_ports):
+    """Selected, not connected: opening the port stays the user's move."""
+    panel, ports = panel_ports
     assert panel.mode.currentData() == "mock"
 
     ports.append("/dev/ttyUSB0")
@@ -322,14 +339,10 @@ def test_a_plugged_in_engraver_is_offered(app):
     ports.append("/dev/ttyACM0")
     panel.watcher.scan()
     assert panel.address.text() == "/dev/ttyACM0", "unplugging and replugging reports again"
-    panel.shutdown()
 
 
-def test_a_connection_chosen_by_hand_is_left_alone(app):
-    panel = DevicePanel()
-    ports: list[str] = []
-    panel.watcher._ports = lambda: list(ports)
-
+def test_a_connection_chosen_by_hand_is_left_alone(panel_ports):
+    panel, ports = panel_ports
     panel.mode.setCurrentIndex(panel.mode.findData("ble"))
     panel.address.setText("LaserPecker-1234")
     panel._chosen_by_hand()
@@ -338,4 +351,3 @@ def test_a_connection_chosen_by_hand_is_left_alone(app):
     panel.watcher.scan()
     assert panel.mode.currentData() == "ble"
     assert panel.address.text() == "LaserPecker-1234"
-    panel.shutdown()

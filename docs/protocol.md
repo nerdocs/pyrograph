@@ -331,6 +331,13 @@ Sequence used by LDS for a raster image (`sendImageFile` → `sendFile`), all ov
 number works as long as the same value is used in the header and in `print start`. Query state 1 (or 10) tells
 whether the ID is already cached on the device, which lets LDS skip the upload entirely.
 
+**The ID is the identity of the stored content, and the device keeps what it already has.** Uploading a new
+image under an ID the device already stores does not replace it: the transfer is acknowledged, and the
+following `print start` engraves the *old* file. Measured on hardware — a motif was engraved a second time
+while the newly sent one never appeared. That is the same cache LDS relies on when it skips an upload; a
+host that derives the ID from a job name walks straight into it, because the name does not change between
+runs. Derive it from the payload and the header geometry instead (`file_id_for_raster`).
+
 ### 5.2 The 64-byte file header
 
 All multi-byte fields big-endian. Byte 0 is the **data-type tag**:
