@@ -26,3 +26,6 @@
 - SVG import: shapes, full path grammar including arcs, nested transforms, units and inline images.
 - Brightness and contrast before dithering, so a photograph can be brought into a burnable range.
 - `laserpecker dither` writes the dithered result as a PNG, to judge the settings without a device.
+- `MockTransport`: an in-memory device that answers queries, takes uploads and runs a job to completion.
+- Device abstraction in `pyrograph.devices`: profile, normalised status, and the LaserPecker adapter.
+- `pyrograph` CLI: import an SVG, show the device, frame a document and engrave it, with `--mock`.

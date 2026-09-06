@@ -7,10 +7,12 @@ import sys
 
 from . import protocol as p
 from .device import LP2_DPI, LaserPecker
-from .transport import BleTransport, SerialTransport, list_serial_ports, scan_ble
+from .transport import BleTransport, MockTransport, SerialTransport, list_serial_ports, scan_ble
 
 
 def _connect(args) -> LaserPecker:
+    if args.mock:
+        return LaserPecker(MockTransport())
     if args.ble:
         return LaserPecker(BleTransport(args.ble))
     return LaserPecker(SerialTransport(args.port))
@@ -133,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="laserpecker", description="Control a LaserPecker engraver")
     parser.add_argument("--port", help="serial port (default: first CH340 found)")
     parser.add_argument("--ble", help="connect over BLE to this address or name instead")
+    parser.add_argument("--mock", action="store_true", help="use a device that only exists in memory")
     sub = parser.add_subparsers(dest="command", required=True)
 
     ports = sub.add_parser("ports", help="list connectable devices")

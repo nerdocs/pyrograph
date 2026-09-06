@@ -22,6 +22,7 @@
 - The dither result differs from the vendor WASM on roughly 30 % of pixels on a grey ramp (same packing,
   different threshold decision). Cosmetic, documented.
 - CLI lacks `delete` (file removal) and a way to engrave an already uploaded file ID.
+- `MockTransport` answers only what the driver asks for; it is no firmware simulator.
 - Only LP2 device data is present; `DeviceProfile` for other models is not filled in.
 
 ## Application (pyrograph)
@@ -35,5 +36,9 @@
 - SVG import handles shapes, arcs, nested transforms and units; `text`, `use`, clipping, masks and
   gradients are skipped and reported. Rounded rectangle corners are ignored.
 - No DXF import.
+- **No spooler.** `LaserDevice.run()` blocks until the job is handed over and the caller polls
+  `status()`. A queue with priorities (`docs/architecture.md`) is only worth building once the GUI
+  needs to stay responsive.
+- Only the LP2 profile exists; `pyrograph.devices` has no second adapter to prove the interface.
 - `TextObject` needs a font file path; no lookup by family name, no kerning.
-- Everything else: editor, device abstraction, spooler, GUI.
+- Everything else: editor, spooler, GUI.

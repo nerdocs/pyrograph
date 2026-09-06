@@ -255,3 +255,128 @@ def write_bulk(transport: Transport, data: bytes, progress=None) -> None:
         if progress:
             progress(min(offset + transport.mtu, total), total)
         time.sleep(transport.chunk_delay)
+
+
+class MockTransport:
+    """A device that only exists in memory — for development and tests without hardware.
+
+    It answers the queries the driver actually sends, accepts an upload and then pretends to engrave: every
+    status query while a job runs advances ``rate`` until the job reports itself finished. What it is not
+    is a firmware simulator; anything the driver does not ask for is answered with a plain acknowledgement.
+    """
+
+    mtu = 2048
+    chunk_delay = 0.0
+
+    #: Replies captured from an LP2 on firmware 3.16 (``tests/fixtures_lp2.json``).
+    VERSION_REPLY = bytes.fromhex("aabb0b00013c01321e8600030117")
+    MAC_REPLY = bytes.fromhex("aabb0b00dc0d30aabbcc0005034f")
+
+    def __init__(self, status_ticks: int = 4) -> None:
+        from . import protocol as p
+
+        self._p = p
+        self._replies: list[bytes] = []
+        self._expect_payload = 0
+        self._status_ticks = max(1, status_ticks)
+        self._mode = p.WorkMode.IDLE
+        self._w_state = 0
+        self._rate = 0
+        self._file_id = 0
+        self.files: list[int] = []
+        self.uploads: list[bytes] = []
+        """Everything that was uploaded as raw payload — header first, then the raster."""
+
+        self.commands: list[bytes] = []
+        """Every command frame the device received, in order."""
+
+    # ------------------------------------------------------------------ transport interface
+
+    def write(self, data: bytes) -> None:
+        if self._expect_payload:
+            take = min(self._expect_payload, len(data))
+            self.uploads[-1] += data[:take]
+            self._expect_payload -= take
+            if not self._expect_payload:
+                self._replies.append(self._file_ack())
+            data = data[take:]
+            if not data:
+                return
+        while len(data) >= 6 and self._p.frame_complete(data):
+            length = data[2]
+            self._handle(data[: length + 3])
+            data = data[length + 3 :]
+
+    def read_frame(self, timeout: float = 3.0) -> bytes | None:
+        return self._replies.pop(0) if self._replies else None
+
+    def flush_input(self) -> None:
+        self._replies.clear()
+
+    def close(self) -> None:
+        self._replies.clear()
+
+    # ------------------------------------------------------------------ the pretend device
+
+    def _handle(self, frame: bytes) -> None:
+        p = self._p
+        self.commands.append(frame)
+        func = frame[3]
+        if func == p.Func.QUERY:
+            self._handle_query(frame[4])
+        elif func == p.Func.FILE and frame[4] == 1:
+            self._expect_payload = int.from_bytes(frame[5:9], "big")
+            self.uploads.append(b"")
+            self._replies.append(self._file_ack())
+        elif func == p.Func.PRINT:
+            self._handle_print(frame)
+            self._replies.append(p.build_frame(p.Func.PRINT, [(1, 1)]))
+        elif func == p.Func.STOP:
+            self._mode, self._rate = p.WorkMode.IDLE, 0
+            self._replies.append(p.build_frame(p.Func.STOP, [(1, 1)]))
+        else:
+            self._replies.append(p.build_frame(func, [(1, 1)]))
+
+    def _handle_query(self, state: int) -> None:
+        p = self._p
+        if state == p.Query.STATUS:
+            self._replies.append(self._status())
+        elif state == p.Query.VERSION:
+            self._replies.append(self.VERSION_REPLY)
+        elif state == p.Query.MAC:
+            self._replies.append(self.MAC_REPLY)
+        elif state == p.Query.FILE_IDS:
+            # Count byte, the IDs, then two trailing bytes — the shape the real reply has.
+            self._replies.append(
+                p.build_frame(
+                    p.Func.QUERY,
+                    [(len(self.files), 1)] + [(f, 4) for f in self.files] + [(0, 1), (0, 1)],
+                )
+            )
+        # The real LP2 does not answer a name query at all, so neither do we.
+
+    def _handle_print(self, frame: bytes) -> None:
+        p = self._p
+        state = frame[4]
+        if state == p.PrintState.START:
+            self._file_id = int.from_bytes(frame[7:11], "big")
+            self._mode, self._w_state, self._rate = p.WorkMode.ENGRAVING, 1, 0
+        elif state == p.PrintState.HOLD:
+            self._w_state = 4
+        elif state == p.PrintState.CONTINUE:
+            self._w_state = 1
+
+    def _status(self) -> bytes:
+        p = self._p
+        if self._mode == p.WorkMode.ENGRAVING and self._w_state != 4:
+            self._rate = min(100, self._rate + 100 // self._status_ticks)
+            if self._rate >= 100:
+                self._mode, self._w_state = p.WorkMode.IDLE, 255
+                if self._file_id not in self.files:
+                    self.files.append(self._file_id)
+        data = [(self._mode, 1), (self._w_state, 1), (self._rate, 1)]
+        data += [(0, 1)] * 4 + [(self._file_id, 4)] + [(0, 1)] * 10
+        return p.build_frame(p.Func.QUERY, data)
+
+    def _file_ack(self) -> bytes:
+        return self._p.build_frame(self._p.Func.FILE, [(1, 1), (1, 1), (0, 1)])

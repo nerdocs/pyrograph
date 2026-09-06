@@ -54,17 +54,30 @@ buffer internally. That fits a K40; it fits the LP2 badly, whose native format *
 ```python
 class LaserDevice(Protocol):
     profile: DeviceProfile
-    def status() -> DeviceStatus         # normalised: idle | running | error, progress
+    def status() -> DeviceStatus         # normalised: offline | idle | running | paused | error
     def frame(bounds, power)             # trace the bounding box
-    def run(job: Job) -> JobHandle
-    def pause() / resume() / abort()
+    def run(job, name, progress)         # returns once the device has taken the job
+    def pause() / resume() / abort() / close()
 ```
 
-`DeviceProfile` holds work area, DPI steps, laser types and capability flags (raster, vectors, rotary,
-autofocus, camera). The GUI reads it instead of hard-coding device knowledge.
+`run` deliberately does not return a handle: it blocks only until the job is uploaded and started, and
+progress is read back from `status()`. Whoever wants to wait decides where the waiting happens — a CLI
+polls, a GUI will let the spooler do it.
+
+`DeviceProfile` holds work area, DPI steps and capability flags (raster, paths, rotary, autofocus). The GUI
+reads it instead of hard-coding device knowledge; `nearest_dpi()` snaps a layer's resolution to a step the
+machine actually has.
 
 Adapters live in `pyrograph.devices`; `laserpecker.py` first, `grbl.py` later. If the interface proves itself,
 it can become its own package.
+
+## Developing without hardware
+
+`laserpecker.transport.MockTransport` is a device that only exists in memory. It answers the queries the
+driver sends, accepts an upload and then advances a progress counter until the job reports itself finished,
+so the whole chain — document, job, adapter, driver — runs and is testable with no engraver attached. Both
+CLIs expose it as `--mock`. It is not a firmware simulator: anything the driver does not ask for is
+answered with a plain acknowledgement.
 
 ## Priority in the queue
 
