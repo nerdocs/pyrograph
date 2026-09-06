@@ -15,3 +15,6 @@
 - Frame reader splits several frames arriving in one read instead of discarding the trailing ones.
 - Replies are matched by function code, so unsolicited acknowledgements are no longer mistaken for answers.
 - Two-package layout: `laserpecker` (driver) and `pyrograph` (GUI), architecture inspired by MeerK40t.
+- Documented the Android app's alternative upload method (`0xD0` packet frames) and its extra function codes.
+- Status mode 1 identified as "engraving"; engraving verified over Bluetooth as well as USB.
+- BLE transport closes on garbage collection — a leaked connection stops the device from advertising.

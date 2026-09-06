@@ -76,6 +76,7 @@ class WorkMode(IntEnum):
     Do **not** confuse this with :class:`AttachmentMode`; the ranges are unrelated.
     """
 
+    ENGRAVING = 1  # a job is running; `rate` counts up
     PREVIEW = 2  # a preview is running
     ERROR = 5  # LDS aborts a job on this value
     IDLE = 6  # ready / job finished

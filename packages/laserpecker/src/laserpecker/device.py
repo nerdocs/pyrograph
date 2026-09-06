@@ -159,6 +159,9 @@ class LaserPecker:
         self.transport.write(header)
         write_bulk(self.transport, raster.payload, progress)
 
+        # Do not send an exit here. The Android app does close its transfers with 0xFF, but that is
+        # part of its packet protocol (0xD0); on this raw-upload path it makes the device discard the
+        # file — measured: the upload is acknowledged but the ID never appears in the file list.
         reply = self.transport.read_frame(timeout=60.0)
         if reply is None or p.parse_file_status(reply) != 1:
             raise TransportError("device did not acknowledge the upload")

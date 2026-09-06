@@ -250,7 +250,7 @@ Offsets below are **absolute frame offsets** (byte 0 = `0xAA`), exactly as LDS i
 | Offset | Field | Meaning |
 | --- | --- | --- |
 | 3 | `func` | must be 0 |
-| 4 | `mode` | operating state, **measured**: 2 = preview running, 5 = error, 6 = idle/finished. This is *not* the `DeviceMode` enum from the LDS renderer (plane/Z/rotary/…) — those values describe the configured attachment and are unrelated. |
+| 4 | `mode` | operating state, **measured**: 1 = engraving (`rate` counts up), 2 = preview running, 5 = error, 6 = idle/finished. This is *not* the `DeviceMode` enum from the LDS renderer (plane/Z/rotary/…) — those values describe the configured attachment and are unrelated. |
 | 5 | `w_state` | working sub-state; measured: 0 fresh idle, 2 during preview, 255 after a preview ended. LDS treats `mode == 6 && w_state == 4` as "still running". |
 | 6 | `rate` | progress in percent |
 | 7 | `laser` | current power |
@@ -478,6 +478,45 @@ Related observations:
 * Right after boot the status may report `error = 1` ("not in a safe state, free mode off"). Uploads and
   engraving still worked.
 
+### A second upload method: packet frames (`0xD0`)
+
+The Android app (`com.hingin.l1.hiprint` 4.39) uploads differently from LDS. Instead of announcing a byte
+count and blasting raw data, it announces a **packet count** and sends numbered, checksummed frames:
+
+```
+AA BB DE  D0  <index:2>  D8  <216 payload bytes>  <ck:2>
+```
+
+* `0xDE` (222) is just the normal length byte: `1 + 2 + 1 + 216 + 2`. The app hard-codes it as the constant
+  `DATA_HEAD = "AABBDE"` because the packet size never varies.
+* `D8` (216) is the number of useful bytes; the final packet is zero-padded to 216 and carries its real
+  length here.
+* `index` counts packets from 0.
+* The announcement is `0x05` state 1 with the **number of packets**, not the byte count.
+* After the last packet the app sends `0xFF` (exit) to close the transfer.
+* More than 4850 packets is rejected by the app as too large.
+
+So both methods start with `0x05` state 1 but differ in what the length means and how the data follows. The
+LDS method is what this library implements and it is verified working; the packet method is more robust
+(per-packet checksum and sequence number, flow-controlled — the app waits for a reply before sending the next
+packet) and would be the better choice if uploads ever prove unreliable.
+
+Additional function codes that only the Android app uses:
+
+| func | Name in the app | Purpose |
+| --- | --- | --- |
+| `0x04` | `FUNCTION_CODE_LASER` | laser control |
+| `0x0F` | `FUNCTION_CODE_SETTING_FACTORY` | factory settings / calibration |
+| `0xD0` | `FUNCTION_CODE_FILE_DATA` | file data packet, above |
+| `0xDA` | `FUNCTION_CODE_FILE_UPDATE_DATA` | firmware data packet |
+
+### The `custom` byte is a correlation tag
+
+The last data byte of most commands — `custom` in LDS, always 0 there — is used by the app as a **request
+tag**: every command type gets its own value (`06` status, `0B` version, `19` exit-after-file, `20` file
+transfer, …) and the device echoes it back, which lets the app match replies to requests. It does not change
+device behaviour, but a client can use it the same way instead of matching on `func` alone.
+
 ### Engraving, measured end to end
 
 Verified on hardware: dither → announce → 64-byte header → payload → `0x01` print start → the motif appears
@@ -492,6 +531,13 @@ rx  aabb 08 ff 01 <len32>               transfer mode left
 
 The device sends acknowledgements unprompted, so a reader must filter replies by `func` — otherwise the
 upload confirmation is mistaken for the answer to the next status query.
+
+**Do not send `0xFF` after a raw upload.** The Android app closes its transfers that way, but that belongs to
+its packet protocol; on this path the upload is still acknowledged while the file silently never appears in
+the file list. Measured on hardware, both with and without.
+
+While a job runs the status reports `mode = 1`, `w_state = 1` and a rising `rate`; on completion it returns
+to `mode = 6` with `w_state = 255`.
 
 ### Preview, measured
 

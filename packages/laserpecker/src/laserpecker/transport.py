@@ -167,6 +167,7 @@ class BleTransport:
     def __init__(self, address_or_name: str, timeout: float = 20.0) -> None:
         from bleak import BleakClient, BleakScanner
 
+        self._closed = False
         self._assembler = _FrameAssembler()
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
@@ -208,11 +209,22 @@ class BleTransport:
         self._assembler.clear()
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         try:
             self._run(self._client.disconnect())
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)
             self._thread.join(timeout=2)
+
+    def __del__(self) -> None:
+        # A connection left open keeps the device from advertising, so it cannot be found again
+        # until something disconnects it. Close on garbage collection as a safety net.
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 def scan_ble(timeout: float = 10.0) -> list[tuple[str, str]]:
