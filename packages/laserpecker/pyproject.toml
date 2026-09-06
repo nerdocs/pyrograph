@@ -9,10 +9,8 @@ license-files = ["LICENSE"]
 dependencies = [
     "pyserial>=3.5",
     "pillow>=10.0",
+    "bleak>=0.22",
 ]
-
-[project.optional-dependencies]
-ble = ["bleak>=0.22"]
 
 [project.scripts]
 laserpecker = "laserpecker.cli:main"

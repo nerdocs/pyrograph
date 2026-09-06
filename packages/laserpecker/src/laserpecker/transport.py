@@ -168,6 +168,9 @@ class BleTransport:
     """
 
     mtu = 179
+    """Payload per write. The vendor app uses 179 and the device is known to swallow that much, so it is
+    the upper bound here — see :meth:`_negotiated_mtu` for why it can end up smaller."""
+
     chunk_delay = 0.1
 
     def __init__(self, address_or_name: str, timeout: float = 20.0) -> None:
@@ -189,7 +192,7 @@ class BleTransport:
                 if device is None:
                     raise TransportError(f"no BLE device matching {address_or_name!r}")
                 target = device
-            client = BleakClient(target)
+            client = BleakClient(target, timeout=timeout)
             await client.connect()
             for service_uuid, write_uuid, notify_uuid in BLE_PROFILES:
                 if any(s.uuid.lower() == service_uuid for s in client.services):
@@ -200,7 +203,23 @@ class BleTransport:
             await client.disconnect()
             raise TransportError("device exposes no known LaserPecker service")
 
-        self._client, self._write_uuid = self._run(connect())
+        # Scanning alone may take the full timeout, connecting and reading the services comes on top.
+        self._client, self._write_uuid = self._run(connect(), timeout=2 * timeout + 10)
+        self.mtu = self._negotiated_mtu()
+
+    def _negotiated_mtu(self) -> int:
+        """Payload size a single write may carry: the ATT MTU minus its three-byte header.
+
+        A write larger than that is rejected by the stack, and the upload then fails with nothing to
+        show for it. BlueZ usually negotiates far more than the 179 bytes the vendor app uses, but not
+        always — an adapter that stays at the 23-byte default leaves room for 20. Capped at the class
+        default because a bigger chunk than the vendor's has never been tried on a device.
+        """
+        try:
+            return max(20, min(type(self).mtu, self._client.mtu_size - 3))
+        except Exception:
+            # Backends that do not expose the negotiated MTU; the vendor's size is the safe guess.
+            return type(self).mtu
 
     def _run(self, coro, timeout: float = 30.0):
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout)

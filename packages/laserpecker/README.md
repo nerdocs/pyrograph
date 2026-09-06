@@ -33,7 +33,7 @@ Decompiling for interoperability is explicitly permitted in the EU (Art. 6 Softw
 ## Install
 
 ```bash
-uv sync                 # or: pip install -e ".[ble,dev]"
+uv sync                 # or: pip install -e "."
 ```
 
 Serial access on Linux needs membership in the `dialout` group; the CH340 driver is in-kernel.

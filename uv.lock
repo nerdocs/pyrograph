@@ -167,22 +167,17 @@ name = "laserpecker"
 version = "0.1.0"
 source = { editable = "packages/laserpecker" }
 dependencies = [
+    { name = "bleak" },
     { name = "pillow" },
     { name = "pyserial" },
 ]
 
-[package.optional-dependencies]
-ble = [
-    { name = "bleak" },
-]
-
 [package.metadata]
 requires-dist = [
-    { name = "bleak", marker = "extra == 'ble'", specifier = ">=0.22" },
+    { name = "bleak", specifier = ">=0.22" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "pyserial", specifier = ">=3.5" },
 ]
-provides-extras = ["ble"]
 
 [[package]]
 name = "numpy"

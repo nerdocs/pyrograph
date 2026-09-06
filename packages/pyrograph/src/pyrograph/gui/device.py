@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -57,6 +58,9 @@ class DeviceWorker(QObject):
     busy = Signal(bool)
     framing = Signal(bool)
     """The device started or stopped tracing the outline."""
+
+    found = Signal(list)
+    """Result of a Bluetooth scan: ``(address, name)`` pairs, possibly empty."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -96,6 +100,16 @@ class DeviceWorker(QObject):
         if mode == "ble":
             return LaserPeckerDevice(LaserPecker(BleTransport(address)))
         return LaserPeckerDevice(LaserPecker(SerialTransport(address or None)))
+
+    @Slot()
+    def scan(self) -> None:
+        """Look for engravers on Bluetooth. Takes seconds — which is why it belongs on this thread."""
+        from laserpecker.transport import scan_ble
+
+        try:
+            self.found.emit(scan_ble())
+        except Exception as error:
+            self.failed.emit(str(error))
 
     @Slot()
     def close_device(self) -> None:
@@ -211,6 +225,7 @@ class DevicePanel(QWidget):
 
     open_requested = Signal(str, str)
     close_requested = Signal()
+    scan_requested = Signal()
     frame_requested = Signal(object, int)
     stop_frame_requested = Signal()
     engrave_requested = Signal(object, str)
@@ -234,6 +249,10 @@ class DevicePanel(QWidget):
         self.address = QLineEdit(placeholderText="auto")
         self.address.setEnabled(False)
         self.address.textEdited.connect(self._chosen_by_hand)
+        # USB enumerates itself; Bluetooth has to be asked, so that mode gets a button of its own.
+        self.scan_button = QPushButton("Scan", clicked=self.scan)
+        self.scan_button.setToolTip("Search for engravers on Bluetooth")
+        self.scan_button.hide()
         self.connect_button = QPushButton("Connect", clicked=self._toggle_connection)
 
         self.state_dot = QLabel("●")
@@ -251,9 +270,14 @@ class DevicePanel(QWidget):
         self.progress.setFormat("%p%")
         self.progress.hide()
 
+        address_row = QHBoxLayout()
+        address_row.setContentsMargins(0, 0, 0, 0)
+        address_row.addWidget(self.address, 1)
+        address_row.addWidget(self.scan_button)
+
         connection = QFormLayout()
         connection.addRow("Connection", self.mode)
-        connection.addRow("Address", self.address)
+        connection.addRow("Address", address_row)
         connection.addRow(self.connect_button)
         connection_box = QGroupBox("Connection")
         connection_box.setLayout(connection)
@@ -289,6 +313,7 @@ class DevicePanel(QWidget):
         self._thread.started.connect(self.worker.start)
         self.open_requested.connect(self.worker.open_device)
         self.close_requested.connect(self.worker.close_device)
+        self.scan_requested.connect(self.worker.scan)
         self.frame_requested.connect(self.worker.frame)
         self.stop_frame_requested.connect(self.worker.stop_frame)
         self.engrave_requested.connect(self.worker.engrave)
@@ -301,6 +326,7 @@ class DevicePanel(QWidget):
         self.worker.failed.connect(self._show_error)
         self.worker.busy.connect(self._set_busy)
         self.worker.framing.connect(self._set_framing)
+        self.worker.found.connect(self._found)
         self._thread.start()
         self._update_buttons()
 
@@ -338,9 +364,44 @@ class DevicePanel(QWidget):
         self.state_text.setText(f"engraver on {port}")
 
     def _mode_changed(self) -> None:
-        mock = self.mode.currentData() == "mock"
-        self.address.setEnabled(not mock)
-        self.address.setPlaceholderText("auto" if self.mode.currentData() == "usb" else "name or address")
+        mode = self.mode.currentData()
+        self.address.setEnabled(mode != "mock")
+        self.address.setPlaceholderText("auto" if mode == "usb" else "name or address")
+        self.scan_button.setVisible(mode == "ble")
+
+    def scan(self) -> None:
+        """Ask the worker to look for engravers on Bluetooth.
+
+        Nothing here reaches a machine — a scan only listens for advertisements — but it takes seconds, so
+        the button stays disabled until the result comes back.
+        """
+        self._chosen_by_hand()
+        self.scan_button.setEnabled(False)
+        self.state_text.setText("scanning…")
+        self.scan_requested.emit()
+
+    def _found(self, devices: list) -> None:
+        """Put the scan result into the address field, asking which one if there is a choice."""
+        self.scan_button.setEnabled(True)
+        self.state_text.setText("not connected")
+        if not devices:
+            QMessageBox.information(
+                self,
+                "Bluetooth",
+                "No engraver found. The device only advertises while it is switched on.",
+            )
+            return
+        address, name = devices[0]
+        if len(devices) > 1:
+            labels = [f"{name or 'unnamed'} — {address}" for address, name in devices]
+            choice, confirmed = QInputDialog.getItem(
+                self, "Bluetooth", "Engraver", labels, 0, False
+            )
+            if not confirmed:
+                return
+            address, name = devices[labels.index(choice)]
+        self.address.setText(address)
+        self.state_text.setText(f"{name or address} found")
 
     def _toggle_connection(self) -> None:
         if self._connected:
@@ -404,6 +465,7 @@ class DevicePanel(QWidget):
 
     def _show_error(self, message: str) -> None:
         self.connect_button.setEnabled(True)
+        self.scan_button.setEnabled(not self._connected)
         if not self._connected:
             self.state_text.setText("not connected")
         QMessageBox.warning(self, "Device", message)
@@ -432,3 +494,5 @@ class DevicePanel(QWidget):
         # Disconnecting stays available while framing: it stops the machine on the way out, and a moving
         # head is the moment you least want the button greyed.
         self.connect_button.setEnabled(not self._busy)
+        # One writer per link: a scan on the worker thread would sit in front of the next status poll.
+        self.scan_button.setEnabled(not self._connected)

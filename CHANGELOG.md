@@ -47,3 +47,6 @@
 - Stop button for framing; the device traces until told to stop, and disconnecting stops it too.
 - An engraver plugged into USB is detected and preselected, by product ID rather than by bridge chip.
 - Upload file IDs derive from the image, not the job name — the device kept the cached file and re-engraved it.
+- `bleak` is a plain dependency now; as an optional extra every Bluetooth path failed on the import instead.
+- BLE chunk size follows the negotiated ATT MTU, capped at the vendor's 179 — a longer write is rejected outright.
+- Bluetooth scan in the device panel: it runs on the worker thread and offers what it found, without connecting.

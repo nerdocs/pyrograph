@@ -129,6 +129,13 @@ chip's vendor alone is not evidence, because the same WCH chip sits in half the 
 made. It selects, it does not connect: opening the port stays the user's move, and it keeps out of the way
 once the connection has been chosen by hand or established.
 
+**Bluetooth has to be asked.** There is nothing to poll — a BLE device is found by listening for its
+advertisements, which takes seconds — so that mode gets a *Scan* button instead. It runs on the worker
+thread like everything else that blocks, and what it finds goes into the address field; more than one
+device and the user picks. Same rule as USB: it selects, it does not connect. A scan while a device is
+connected is out of reach, because the worker has one thread and the scan would sit in front of the next
+status poll.
+
 **Framing has to be stopped.** Tracing the outline is not a one-shot command — the device repeats it until
 told otherwise, which is the point: the outline stays visible while the workpiece is moved into place. So
 *Frame* is paired with *Stop*, and while it runs everything else is out of reach, because the head is

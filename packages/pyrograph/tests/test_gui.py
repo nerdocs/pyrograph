@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QMouseEvent  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from pyrograph.document import Document, ImageObject, Layer, Path, PathObject, Point  # noqa: E402
 from pyrograph.gui import arrange  # noqa: E402
@@ -351,3 +351,33 @@ def test_a_connection_chosen_by_hand_is_left_alone(panel_ports):
     panel.watcher.scan()
     assert panel.mode.currentData() == "ble"
     assert panel.address.text() == "LaserPecker-1234"
+
+
+def test_a_bluetooth_scan_offers_what_it_found(app, monkeypatch, panel_ports):
+    """The scan runs on the worker thread — the panel only shows what came back."""
+    panel, _ = panel_ports
+    monkeypatch.setattr(
+        "laserpecker.transport.scan_ble",
+        lambda *_a, **_k: [("DD:0D:30:AA:BB:CC", "LaserPecker-IIAABBCC")],
+    )
+    panel.mode.setCurrentIndex(panel.mode.findData("ble"))
+    assert not panel.scan_button.isHidden(), "Bluetooth is the mode that needs a scan"
+
+    panel.scan()
+    assert not panel.scan_button.isEnabled(), "a running scan must not be started twice"
+    assert _pump(app, lambda: panel.address.text() == "DD:0D:30:AA:BB:CC")
+    assert panel.scan_button.isEnabled()
+    assert not panel._connected, "finding a device does not connect to it"
+
+
+def test_an_empty_bluetooth_scan_says_so(app, monkeypatch, panel_ports):
+    panel, _ = panel_ports
+    said: list[str] = []
+    monkeypatch.setattr("laserpecker.transport.scan_ble", lambda *_a, **_k: [])
+    monkeypatch.setattr(QMessageBox, "information", lambda _p, _t, text: said.append(text))
+
+    panel.mode.setCurrentIndex(panel.mode.findData("ble"))
+    panel.scan()
+    assert _pump(app, lambda: bool(said)), "an empty scan left the user without an answer"
+    assert "switched on" in said[0]
+    assert panel.scan_button.isEnabled()

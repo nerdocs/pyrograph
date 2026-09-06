@@ -53,6 +53,13 @@ three octets of its MAC; the BLE address has the first octet incremented by one.
 | Notify | `49535343-1e4d-4bd9-ba61-23c647249616` |
 | Chunk size | 179 bytes, 100 ms apart |
 
+The chunk size is an upper bound, not a constant: a write may not exceed the negotiated ATT MTU minus its
+three-byte header, so the transport takes the smaller of 179 and `MTU − 3`. BlueZ usually negotiates far
+more than 179, but an adapter left at the 23-byte default has room for 20 — and a write past the limit is
+rejected outright, which makes an upload fail with nothing to show for it. Upwards the vendor's 179 stays
+the cap, because no larger chunk has ever been tried on a device.
+
+
 ```bash
 laserpecker ports --ble-scan
 laserpecker --ble DD:0D:30:AA:BB:CC status

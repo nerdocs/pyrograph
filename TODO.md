@@ -21,6 +21,16 @@
   and could not be read, so the two will not match pixel for pixel.
 - The dither result differs from the vendor WASM on roughly 30 % of pixels on a grey ramp (same packing,
   different threshold decision). Cosmetic, documented.
+- **Unverified on hardware:** the content-derived upload file ID (`file_id_for_raster`). It explains the
+  observed failure — the device re-engraved the previous motif because the ID came from the job name and
+  the device keeps the file it already has — but the fix itself has only been reasoned about, not run
+  against a machine. First engraving of a changed image after a previous one is the test.
+- **BLE unverified since the chunk-size fix.** `bleak` was an optional extra and simply not installed, so
+  every Bluetooth path died on the import; it is a plain dependency now. The transport also caps its chunk
+  at the negotiated ATT MTU instead of always writing 179 bytes — reasoned about, not run against a
+  machine. A scan, a `status` and one upload over BLE is the test.
+- **No disconnect handling on BLE.** If the link drops, nothing notices: every call waits out its timeout
+  and there is no reconnect. `BleakClient` takes a `disconnected_callback` that would make it visible.
 - CLI lacks `delete` (file removal) and a way to engrave an already uploaded file ID. `delete_file` is
   built but never sent to a device.
 - **Uploaded files accumulate.** Every distinct image leaves a file on the device, and nothing removes it.

@@ -27,8 +27,11 @@ def cmd_ports(args) -> int:
         print("(the USB-C data port sits on the power/control block, not on the laser head)")
     if args.ble_scan or not ports:
         print("scanning for Bluetooth devices ...")
-        for address, name in scan_ble():
+        found = scan_ble()
+        for address, name in found:
             print(f"{address}  {name}")
+        if not found:
+            print("no LaserPecker found on Bluetooth (the device only advertises while it is switched on)")
     return 0
 
 
