@@ -138,11 +138,11 @@ class LaserPecker:
 
         reply = self.request(p.open_file_transfer(len(raster.payload)), timeout=60.0)
         if reply[3] != p.Func.FILE or p.parse_file_status(reply) != 1:
-            # A 0xFF frame here means the device is in the state a preview leaves behind
-            # (w_state 255) and refuses transfers until it is power-cycled.
+            # A 0xFF frame instead of 0x05 means the device is stuck; only a power cycle is
+            # known to clear it (docs/protocol.md, "stuck refusing all file transfers").
             raise TransportError(
                 f"device refused the file transfer (reply {reply.hex()}); "
-                "if a preview ran before, the device needs a power cycle"
+                "power-cycle the device and try again"
             )
 
         header = p.raster_header(

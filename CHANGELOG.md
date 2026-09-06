@@ -11,7 +11,7 @@
 - Read path verified on an LP2 (firmware 3.16) over USB and BLE; captured replies kept as test fixtures.
 - Status byte 24 identified as the active-link indicator (1 = Bluetooth, 2 = USB).
 - Engraving verified end to end on hardware: dither, upload, print start, motif on the workpiece.
-- Documented that a preview leaves the device unable to accept file transfers until power-cycled.
+- Documented a device state where all file transfers are refused; cause unknown, cleared by a power cycle.
 - Frame reader splits several frames arriving in one read instead of discarding the trailing ones.
 - Replies are matched by function code, so unsolicited acknowledgements are no longer mistaken for answers.
 - Two-package layout: `laserpecker` (driver) and `pyrograph` (GUI), architecture inspired by MeerK40t.

@@ -39,7 +39,7 @@ def test_status_idle():
 
 
 def test_status_reports_active_link():
-    # byte 24 is 1 when the device is talking over Bluetooth, 2 over USB
+    # byte 24: 1 when only BLE is connected, 2 whenever USB is plugged in
     assert p.parse_status(frame("status")).u_b_conn == 1
 
     usb = bytes.fromhex("aabb18000600000000000000000000000000000000000000020008")

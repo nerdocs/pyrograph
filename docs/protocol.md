@@ -426,7 +426,8 @@ Confirmed on an **LP2, firmware 3.16, hardware `01 32 1e 86`**, over both transp
 
 * Framing and checksums are correct on both short frames and the 133-byte file-ID reply.
 * USB and BLE return byte-identical payloads — with one exception: **byte 24 of the status reply
-  (`u_b_cnn`) reports the active link — `1` over Bluetooth, `2` over USB.** LDS never surfaces this.
+  (`u_b_cnn`) reports the link.** Measured: `1` when only BLE is connected, `2` whenever USB is plugged in,
+  including while a BLE session is open in parallel — USB appears to win. LDS never surfaces this.
 * The USB bridge in this unit is a **CH340 (`1a86:7523`)** at 460800 baud, appearing as `/dev/ttyUSB0`.
   Newer units use a **CH9102 (`1a86:55d4`)**, which the in-tree `ch341` driver does *not* claim — it shows up
   as `/dev/ttyACM*` through `cdc_acm` instead.
@@ -443,22 +444,29 @@ Confirmed on an **LP2, firmware 3.16, hardware `01 32 1e 86`**, over both transp
 **Not supported by firmware 3.16** — these queries are answered with silence, not an error:
 state 7 (named file list), 8 (device name), 9 (connectivity), 11 (Wi-Fi version). They belong to LP5/LP2P.
 
-### A preview poisons the device for file transfers
+### The device can get stuck refusing all file transfers
 
-**Once a preview has run, the device refuses every file transfer until it is power-cycled.** A `stop` does
-not clear it. The giveaway is `w_state == 255`, which a preview leaves behind and nothing resets.
+Observed once, persisting for hours across every attempted variation. **Cause unknown — only a power cycle
+cleared it.**
 
 | | Reply to `0x05` state 1 |
 | --- | --- |
-| Fresh boot (`w_state == 0`) | `aabb 08 05 01 01 00 00 00 00 07` — `func 0x05`, `rev = 1`, accepted |
-| After a preview (`w_state == 255`) | `aabb 08 ff 01 <len32> …` — `func 0xFF`, refused |
+| Healthy | `aabb 08 05 01 01 00 00 00 00 07` — `func 0x05`, `rev = 1`, accepted |
+| Stuck | `aabb 08 ff 01 <len32> …` — `func 0xFF`, refused |
 
-The refusal is easy to mistake for an acknowledgement because it echoes the announced length. Proof that it
-is a refusal: send a status query instead of payload right afterwards and the device answers normally — one
-in receive mode would swallow those bytes as data.
+The refusal is easy to mistake for an acknowledgement because it echoes the announced length. Two reliable
+checks: the reply's `func` is `0xFF` instead of `0x05`, and a status query sent instead of payload gets a
+normal answer — a device in receive mode swallows those bytes as data.
 
-Ruled out while tracking this down (all behave identically): payload size 1 – 22500 bytes, `0x10` vs `0x60`,
-chunked vs. single write, a trailing `0x05` state 2, a preceding `0x01` state 3, and the file-ID range.
+**Ruled out as the cause.** Each of these was re-tested after the power cycle and transfers kept working:
+running a preview beforehand (the initial suspicion — it was wrong), `w_state == 255` (that value is normal
+and present while transfers succeed), an open BLE session in parallel, switching between BLE and USB,
+payload size 1 – 22500 bytes, `0x10` vs `0x60`, chunked vs. single write, a trailing `0x05` state 2, a
+preceding `0x01` state 3, and the file-ID range.
+
+Nothing has reproduced it since. It appeared after hours of uptime and many failed transfer attempts, so a
+firmware lock-up is the best guess. A client should recognise the `0xFF` reply and tell the user to
+power-cycle the device rather than retry.
 
 Related observations:
 

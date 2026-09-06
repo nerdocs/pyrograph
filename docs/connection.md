@@ -63,7 +63,8 @@ validates.
 
 ## Which link is active
 
-Byte 24 of the status reply says: `1` = Bluetooth, `2` = USB.
+Byte 24 of the status reply: `1` when only BLE is connected, `2` whenever USB is plugged in (USB wins if
+both are).
 
 ## Firmware
 
