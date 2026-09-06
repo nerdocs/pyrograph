@@ -30,3 +30,5 @@
 - Device abstraction in `pyrograph.devices`: profile, normalised status, and the LaserPecker adapter.
 - `pyrograph` CLI: import an SVG, show the device, frame a document and engrave it, with `--mock`.
 - SVG import drops invisible elements, so an icon's bounding-box path is no longer engraved.
+- Stroke width per layer (`line_width_mm`); a one-pixel hairline burns too faintly to see on paper.
+- Engraving from a pyrograph document verified on hardware: SVG icon to marked workpiece.

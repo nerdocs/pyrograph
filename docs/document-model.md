@@ -96,8 +96,12 @@ job), `use`, clipping, masks, gradients. Rounded rectangle corners are ignored.
 
 `pyrograph.job.build_raster_job(document, layer_index)` is the only place where millimetres become pixels.
 The layer's DPI decides the raster size, the layer's bounding box decides the origin, the layer's parameters
-ride along unchanged. Paths are stroked one pixel wide — a laser follows outlines, it does not fill them.
-Vector output waits for the line/fill command (`0x40`) to be decoded.
+ride along unchanged. Paths are stroked at the layer's `line_width_mm` — a laser follows outlines, it does
+not fill them. Vector output waits for the line/fill command (`0x40`) to be decoded.
+
+The stroke width matters more than it looks. Measured on paper at power 30: a filled area comes out solid
+black, the same settings with a 0.1 mm hairline are barely visible, and 0.3 mm is clearly legible. In a
+filled patch neighbouring rows reinforce each other; a single-pixel line gets exactly one pass.
 
 At 254 dpi one millimetre is exactly ten pixels, which makes the numbers easy to check against a hardware
 run: 15 mm is 150 px, an origin of 40 mm is `nx = 400`.

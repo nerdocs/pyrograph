@@ -47,7 +47,8 @@ def build_raster_job(
 ) -> RasterJob | None:
     """Rasterise one layer at its own DPI. Returns ``None`` if the layer holds nothing to burn.
 
-    Paths are stroked one pixel wide; filling them is not implemented, because a laser follows outlines.
+    Paths are stroked at the layer's ``line_width_mm``; filling them is not implemented, because a laser
+    follows outlines.
     """
     from PIL import Image, ImageChops, ImageDraw
 
@@ -64,6 +65,7 @@ def build_raster_job(
     # Document millimetres → canvas pixels.
     to_canvas = Transform.translate(-box.x, -box.y).then(Transform.scale(scale))
 
+    stroke_px = max(1, round(layer.params.line_width_mm * scale))
     canvas = Image.new("L", (width_px, height_px), 255)  # 255 = untouched
     draw = ImageDraw.Draw(canvas)
     for obj in layer.objects:
@@ -83,7 +85,8 @@ def build_raster_job(
             draw = ImageDraw.Draw(canvas)
         else:
             for line in obj.local_path().transformed(placement).polylines():
-                draw.line([(p.x, p.y) for p in line], fill=0, width=1)
+                # "curve" rounds the joints; without it a wide polyline shows notches at every corner.
+                draw.line([(p.x, p.y) for p in line], fill=0, width=stroke_px, joint="curve")
 
     mono = dither(list(canvas.tobytes()), width_px, height_px, inverse)
     payload = pack_bits(mono, width_px, height_px) if packed else bytes(mono)

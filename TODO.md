@@ -24,6 +24,9 @@
 - CLI lacks `delete` (file removal) and a way to engrave an already uploaded file ID.
 - `MockTransport` answers only what the driver asks for; it is no firmware simulator.
 - Only LP2 device data is present; `DeviceProfile` for other models is not filled in.
+- **Material data, paper, 20 mm motif at 254 dpi:** power 15 / depth 30 leaves nothing at all; power 30 /
+  depth 50 marks a filled area solidly, a 0.1 mm outline barely, a 0.3 mm outline clearly. No other
+  material has been measured.
 
 ## Application (pyrograph)
 
@@ -38,6 +41,9 @@
 - **No scale/move operations.** An imported icon is a few millimetres wide and there is no command to
   resize it — only the editor will bring that.
 - No DXF import.
+- **SVG `stroke-width` is discarded on import.** The stroke width comes from the layer, so an icon that
+  was drawn with a heavy stroke loses that relation when it is scaled up. Per-object stroke width would
+  fix it, at the cost of a new field through model, import, serialisation and rasteriser.
 - **No spooler.** `LaserDevice.run()` blocks until the job is handed over and the caller polls
   `status()`. A queue with priorities (`docs/architecture.md`) is only worth building once the GUI
   needs to stay responsive.

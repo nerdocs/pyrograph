@@ -31,6 +31,14 @@ class LaserParams:
     dpi: float = 254.0
     """Resolution the layer is rasterised at when the job is built."""
 
+    line_width_mm: float = 0.1
+    """How wide a path is stroked when it is rasterised.
+
+    A hairline burns much fainter than a filled area: neighbouring rows of a solid patch reinforce each
+    other, a single-pixel line gets exactly one pass. Measured on paper at power 30 — a 0.1 mm line is
+    barely visible where a filled square is solid black.
+    """
+
 
 @dataclass
 class Layer:

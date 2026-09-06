@@ -63,3 +63,31 @@ def test_a_path_is_stroked_into_the_raster():
 
 def test_an_empty_layer_produces_no_job():
     assert build_raster_job(Document(), 0) is None
+
+
+def test_the_line_width_decides_how_much_actually_burns():
+    # A hairline deposits far less energy than a wide stroke — on paper the difference is visible or not.
+    def burnt(line_width_mm: float) -> int:
+        document = Document(
+            layers=[
+                Layer(
+                    params=LaserParams(dpi=254.0, line_width_mm=line_width_mm),
+                    objects=[PathObject(path=Path.rect(0, 0, 10, 10))],
+                )
+            ]
+        )
+        return build_raster_job(document, 0).raster.payload.count(0)
+
+    assert burnt(0.3) > 2 * burnt(0.1)
+
+
+def test_a_line_width_below_one_pixel_still_draws():
+    document = Document(
+        layers=[
+            Layer(
+                params=LaserParams(dpi=254.0, line_width_mm=0.001),
+                objects=[PathObject(path=Path.rect(0, 0, 10, 10))],
+            )
+        ]
+    )
+    assert build_raster_job(document, 0).raster.payload.count(0) > 0
