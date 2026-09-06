@@ -16,6 +16,10 @@
 
 ## Driver
 
+- **No image pre-processing.** The vendor pipeline takes brightness, contrast and invert before dithering
+  (`image_to_dither_stream(data, w, h, brightness, contrast, inverse, …)`); `image_to_raster` only has
+  `inverse`. Without those, a photograph cannot be brought into a usable range no matter how good the dither
+  is. Add them, plus a preview of the dithered result so the settings can be judged before burning.
 - Dithering runs in pure Python; large images need a vectorised (numpy) path.
 - The dither result differs from the vendor WASM on roughly 30 % of pixels on a grey ramp (same packing,
   different threshold decision). Cosmetic, documented.
