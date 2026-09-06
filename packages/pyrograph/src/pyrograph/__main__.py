@@ -1,8 +1,8 @@
 """Command line for pyrograph.
 
-The GUI does not exist yet; this drives the same document model and device abstraction from a terminal, so
-the chain SVG → document → job → laser is usable and testable end to end. ``--mock`` runs it all against a
-device that only exists in memory.
+The window is its own executable (``pyrograph-gui``); the subcommands below drive the same document model
+and device abstraction from a terminal, so the chain SVG → document → job → laser stays scriptable and
+testable end to end. ``--mock`` runs it all against a device that only exists in memory.
 """
 
 from __future__ import annotations

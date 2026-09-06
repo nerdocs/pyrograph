@@ -4,7 +4,15 @@ Nothing in here imports Qt or talks to a device. That is deliberate: the model s
 hardware, and a later GUI change touches nothing below it.
 """
 
-from .commands import AddObject, Command, MoveObject, RemoveObject, SetLayerParams, UndoStack
+from .commands import (
+    AddObject,
+    Command,
+    MoveObject,
+    RemoveObject,
+    SetLayerParams,
+    SetLayerVisible,
+    UndoStack,
+)
 from .document import Document
 from .geometry import Close, CubicTo, LineTo, MoveTo, Path, Point, Rect, Transform
 from .layer import LaserParams, Layer
@@ -31,6 +39,7 @@ __all__ = [
     "Rect",
     "RemoveObject",
     "SetLayerParams",
+    "SetLayerVisible",
     "SvgImport",
     "SvgImportError",
     "TextObject",

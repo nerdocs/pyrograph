@@ -50,4 +50,21 @@
   needs to stay responsive.
 - Only the LP2 profile exists; `pyrograph.devices` has no second adapter to prove the interface.
 - `TextObject` needs a font file path; no lookup by family name, no kerning.
-- Everything else: editor, spooler, GUI.
+- Everything else: editor, spooler.
+
+## GUI (`pyrograph-gui`)
+
+- First slice done: canvas, layer panel with laser parameters, device panel on a worker thread
+  (`docs/gui.md`). Headless tests run on Qt's `offscreen` platform.
+- **No object editing.** The canvas is read-only — no selection, no move, no scale, no rotate. That needs
+  the missing model commands first (see "No scale/move operations" above).
+- **Import replaces the document** instead of merging into the open one. Also drops the undo history.
+- Objects are drawn but not named or listed; there is no object tree next to the layer list.
+- No layer management: layers cannot be added, renamed, reordered or deleted, and objects cannot be
+  moved between them, so `MoveObject` has no GUI at all.
+- Frame runs at power 1, hard-coded. No focus/Z control, no rotary UI, no device settings dialog —
+  the declarative settings from `docs/architecture.md` are not built.
+- Engraving hands the worker a deep copy; a second job cannot be queued while one runs (no spooler).
+- The device profile is not read by the canvas: the work area comes from the document, so a document
+  larger than the machine bed is not flagged.
+- BLE connects by name or address typed by hand; `scan_ble()` exists but there is no scan dialog.

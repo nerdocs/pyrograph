@@ -35,3 +35,4 @@
 - SVG `stroke-width` is imported per object, converted to millimetres and scaled with the transform.
 - The raster covers the stroked ink instead of the bare path, so wide outlines are no longer clipped.
 - Round joints and caps when stroking, so icon dots drawn as zero-length segments survive.
+- GUI (`pyrograph-gui`): work-area canvas, layer panel with laser parameters, device panel on a worker thread.

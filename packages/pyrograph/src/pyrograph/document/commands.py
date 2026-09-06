@@ -124,6 +124,23 @@ class MoveObject(Command):
 
 
 @dataclass
+class SetLayerVisible(Command):
+    """Show or hide a layer. Undoable like everything else — a hidden layer is not engraved."""
+
+    layer_index: int
+    visible: bool
+    _previous: bool = field(default=True, init=False)
+
+    def do(self, document: Document) -> None:
+        layer = document.layers[self.layer_index]
+        self._previous = layer.visible
+        layer.visible = self.visible
+
+    def undo(self, document: Document) -> None:
+        document.layers[self.layer_index].visible = self._previous
+
+
+@dataclass
 class SetLayerParams(Command):
     """Replace a layer's laser parameters."""
 

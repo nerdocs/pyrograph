@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 pyrograph = "pyrograph.__main__:main"
+pyrograph-gui = "pyrograph.gui:main"
 
 [build-system]
 requires = ["hatchling"]

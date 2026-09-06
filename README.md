@@ -8,7 +8,7 @@ Two packages in one repository:
 | Package | PyPI | What it is |
 | --- | --- | --- |
 | [`laserpecker`](packages/laserpecker) | `laserpecker` | Driver library: protocol, transports, imaging. No GUI. |
-| [`pyrograph`](packages/pyrograph) | `pyrograph` | The application: document model, devices, CLI. No GUI yet. |
+| [`pyrograph`](packages/pyrograph) | `pyrograph` | The application: document model, devices, GUI, CLI. |
 
 Reference device: **LaserPecker 2**, firmware 3.16. The protocol is shared across LP1–LP5, and the device
 abstraction is designed so other engravers can be added.
@@ -17,7 +17,8 @@ abstraction is designed so other engravers can be added.
 
 The driver's read path is verified on real hardware over both USB and Bluetooth; engraving works over both.
 The application has a document model, SVG import, job creation, a device abstraction and a command line —
-SVG to engraved workpiece runs end to end. The GUI has not been started.
+SVG to engraved workpiece runs end to end. `pyrograph-gui` opens a window that shows a document and
+engraves it; editing objects on the canvas is not implemented yet.
 
 Developing without an engraver: both CLIs take `--mock`, which drives a device that only exists in memory.
 
