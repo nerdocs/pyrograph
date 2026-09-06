@@ -35,5 +35,10 @@ vendor/
 *.exe
 *.dmg
 
+# Browser automation scratch: session logs and page snapshots from research
+# browsing. Working residue, and it carries the analytics identifiers of
+# whatever page was open at the time.
+.playwright-mcp/
+
 # Local, uncommitted
 CLAUDE.local.md
