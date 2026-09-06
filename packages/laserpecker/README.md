@@ -8,25 +8,31 @@ with adjusted device limits.
 
 ## Status
 
-Read path verified on real hardware (LP2, firmware 3.16) over **both USB and Bluetooth**. Everything that
-fires the laser is written but untested.
+Tested on real hardware (LP2, firmware 3.16) over both USB and Bluetooth: reading the device works, and
+engraving runs end to end — dither, upload, print start, motif on the workpiece.
 
 | Area | State |
 | --- | --- |
 | Frame encoding / checksums | byte-identical to LDS 2.12.1, confirmed on device |
 | Status, version, MAC, file list | **verified on hardware**, both transports |
 | Serial transport (CH340, 460800) | **verified** |
-| BLE transport | **verified** |
-| Preview, focus, stop | implemented, **untested** — moves/fires the laser |
-| Raster upload + engrave | implemented, **untested** |
+| BLE transport | verified, but not re-run since the chunk-size fix |
+| Preview (frame) and stop | **verified** |
+| Raster upload + engrave | **verified end to end** |
+| Upload file ID from image content | reasoned about, not yet re-run on a machine |
+| Focus / Z-axis, settings write | implemented, **untested** — moves hardware |
 | Vector / G-code jobs | not implemented |
+
+The full list of what is still a guess is in
+[`TODO.md`](https://github.com/nerdocs/pyrograph/blob/main/TODO.md).
 
 ## How it was obtained
 
 LaserPecker Design Space 2.12.1 for Windows is an Electron app. Its renderer bundle contains the complete
 command layer in readable JavaScript, and the image pipeline as a WebAssembly module that can be executed
-directly. Everything in `docs/protocol.md` comes from reading that code and running the WASM against synthetic
-images — no traffic capture, no hardware needed.
+directly. The specification —
+[`docs/protocol.md`](https://github.com/nerdocs/pyrograph/blob/main/docs/protocol.md) — comes from reading
+that code and running the WASM against synthetic images; the machine then confirmed it.
 
 Decompiling for interoperability is explicitly permitted in the EU (Art. 6 Software Directive, § 40e öUrhG).
 
@@ -74,7 +80,6 @@ The laser fires on `preview` and `engrave`. Wear the goggles, do not leave a run
 ## Layout
 
 ```
-docs/protocol.md          the specification
 src/laserpecker/
     protocol.py           frames, commands, reply parsers
     transport.py          serial + BLE

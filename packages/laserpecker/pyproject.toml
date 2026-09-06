@@ -12,6 +12,12 @@ dependencies = [
     "bleak>=0.22",
 ]
 
+[project.urls]
+Homepage = "https://github.com/nerdocs/pyrograph"
+Repository = "https://github.com/nerdocs/pyrograph"
+Issues = "https://github.com/nerdocs/pyrograph/issues"
+Documentation = "https://github.com/nerdocs/pyrograph/blob/main/docs/protocol.md"
+
 [project.scripts]
 laserpecker = "laserpecker.cli:main"
 
