@@ -263,6 +263,38 @@ def test_the_place_dialogs_hand_back_a_positioned_object(app, monkeypatch):
         assert obj.bounds().x == pytest.approx(12.0, abs=1.0), kind
 
 
+def test_a_dialog_opens_with_the_cursor_in_its_first_field(app, monkeypatch):
+    """The button box exists before the form is filled, so without help the OK button takes the keyboard."""
+    from PySide6.QtWidgets import QDialog, QLineEdit
+
+    from pyrograph.gui import dialogs
+
+    focused = []
+
+    def show_and_look(self):
+        """Read the focus off a visible dialog, then close it. The widgets die with the dialog, so
+        everything worth asserting has to be read out here."""
+        self.show()
+        self.activateWindow()
+        app.processEvents()
+        widget = self.focusWidget()
+        # A spin box keeps its text in a line edit of its own.
+        line = widget if isinstance(widget, QLineEdit) else widget.findChild(QLineEdit)
+        focused.append((type(widget).__name__, line.selectedText()))
+        self.hide()
+        return QDialog.DialogCode.Rejected
+
+    # Here QDialog is the right patch point: it is what _Dialog.exec calls once it has set the focus.
+    monkeypatch.setattr(QDialog, "exec", show_and_look)
+    dialogs.ask_text(None, Point(0.0, 0.0))
+    dialogs.ask_qr(None, Point(0.0, 0.0))
+    dialogs.ask_array(None, 10.0)
+
+    assert [name for name, _ in focused] == ["QLineEdit", "QLineEdit", "QSpinBox"]
+    selected = [text for _, text in focused]
+    assert selected == ["Text", "", "2"], "a default value must be typed over, not cleared by hand"
+
+
 def test_framing_runs_until_it_is_stopped(app, window):
     panel = window.device
     panel.open_requested.emit("mock", "")

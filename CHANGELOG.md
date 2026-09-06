@@ -50,3 +50,4 @@
 - `bleak` is a plain dependency now; as an optional extra every Bluetooth path failed on the import instead.
 - BLE chunk size follows the negotiated ATT MTU, capped at the vendor's 179 — a longer write is rejected outright.
 - Bluetooth scan in the device panel: it runs on the worker thread and offers what it found, without connecting.
+- Dialogs open with the cursor in their first field; the OK button used to take the keyboard and swallow typing.

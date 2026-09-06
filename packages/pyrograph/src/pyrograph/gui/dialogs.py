@@ -8,6 +8,7 @@ clicked.
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -41,6 +42,18 @@ class _Dialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addLayout(self.form)
         layout.addWidget(buttons)
+
+    def exec(self) -> int:
+        """Open with the cursor in the first field.
+
+        The button box exists before the caller has filled the form, so it comes first in the focus chain
+        and would take the keyboard: typing would go nowhere and Space would confirm the dialog. Focusing
+        as if by Tab also selects what the field already holds, so a default value is simply typed over.
+        """
+        row = self.form.itemAt(0, QFormLayout.ItemRole.FieldRole)
+        if row is not None and row.widget() is not None:
+            row.widget().setFocus(Qt.FocusReason.TabFocusReason)
+        return super().exec()
 
 
 def ask_text(parent, at: Point) -> DocumentObject | None:
