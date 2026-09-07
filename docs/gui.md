@@ -7,8 +7,8 @@ Qt Widgets (PySide6), started with `pyrograph-gui [file.pyg]`.
 │ File  Edit  Modify  Device  View                                     │
 │ Open Save │ Cut Copy Paste Delete │ Undo Redo │ Frame Engrave        │
 ├───┬───────────────┬──────────────────────────────┬───────────────────┤
-│ ▶ │ Layers        │  0    20    40    60    80   │ Connection        │
-│ ✋│ ☑ Codes (5)   │ ┌────────────────────────┐   │  Mock / USB / BLE │
+│ ▶ │ Layers        │  0    20    40    60    80   │ Device            │
+│ ✋│ ☑ Codes (5)   │ ┌────────────────────────┐   │  machine, link    │
 │ ╱ │ ☑ Photo (1)   │0│  ▣▣  ▌▌▌▌▌▌▌▌         │   │ ───────────────── │
 │ ▭ │               │ │                       │   │ Job               │
 │ ○ │ Laser params  │2│  ┌──▫────▫──┐         │   │  ● idle           │
@@ -141,12 +141,27 @@ all three ask the same question closing does. Whether there is anything to ask a
 stack, which remembers how far back the last save was: undoing every change since it makes the document
 unmodified again, and the title loses its star.
 
-**Plugging in selects the machine.** The port list is polled every two seconds — reading it is a look at
+**Plugging in selects the machine.** The device list is polled every two seconds — reading it is a look at
 the operating system's device table, no traffic on any port — and an engraver that was not there a moment
-ago is put into the connection fields. Only the two USB product IDs LaserPecker ships qualify; the bridge
-chip's vendor alone is not evidence, because the same WCH chip sits in half the hobby electronics ever
-made. It selects, it does not connect: opening the port stays the user's move, and it keeps out of the way
-once the connection has been chosen by hand or established.
+ago is put into the fields above, machine and connection both.
+
+The two kinds announce themselves differently. A LaserPecker turns up as a serial port, and only the two
+USB product IDs it ships qualify: the bridge chip's vendor alone is not evidence, because the same WCH chip
+sits in half the hobby electronics ever made. A galvo has no serial port at all — its board is found by the
+USB identity only LMC controllers carry, and there is no address to fill in afterwards.
+
+It selects, it does not connect: opening the link stays the user's move, and it keeps out of the way once
+the choice has been made by hand or a connection established.
+
+**Two questions, not one list.** *Machine* says what is attached, *Connection* says how to reach it. They
+stay separate because they multiply: a LaserPecker answers over serial or Bluetooth, a galvo only over USB,
+and either can be pretended. One list of every working pair would grow with each machine and ask two things
+at once. Picking a machine rebuilds the link list rather than greying entries out — a Bluetooth option that
+can never be chosen on a galvo is a dead end found by trying it. A galvo also loses the address field: an
+LMC board is found by its USB identity, so there is nothing to type.
+
+Which machines exist, and what each can be reached over, is the `_MACHINES` table in `gui/device.py`. A
+third one is an entry there plus an adapter in `pyrograph.devices` — no new branches in the panel.
 
 **Bluetooth has to be asked.** There is nothing to poll — a BLE device is found by listening for its
 advertisements, which takes seconds — so that mode gets a *Scan* button instead. It runs on the worker

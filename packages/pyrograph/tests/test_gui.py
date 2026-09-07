@@ -99,7 +99,7 @@ def test_visibility_toggle_is_undoable(window):
 
 def test_engraving_runs_against_the_mock_device(app, window):
     panel = window.device
-    panel.open_requested.emit("mock", "")
+    panel.open_requested.emit("laserpecker", "mock", "")
     assert _pump(app, lambda: panel._connected), "the mock device never connected"
 
     panel.engrave_requested.emit(window.document, "test")
@@ -308,7 +308,7 @@ def test_a_dialog_opens_with_the_cursor_in_its_first_field(app, monkeypatch):
 
 def test_framing_runs_until_it_is_stopped(app, window):
     panel = window.device
-    panel.open_requested.emit("mock", "")
+    panel.open_requested.emit("laserpecker", "mock", "")
     assert _pump(app, lambda: panel._connected)
     assert not panel.stop_button.isEnabled(), "nothing to stop yet"
 
@@ -328,7 +328,7 @@ def test_framing_runs_until_it_is_stopped(app, window):
 def test_disconnecting_stops_the_machine_first(app, window):
     """Closing the port leaves the device tracing with nobody left to tell it otherwise."""
     panel = window.device
-    panel.open_requested.emit("mock", "")
+    panel.open_requested.emit("laserpecker", "mock", "")
     assert _pump(app, lambda: panel._connected)
     panel.frame()
     assert _pump(app, lambda: panel._framing)
@@ -486,7 +486,7 @@ def test_frame_and_engrave_follow_the_connection(app, window):
     assert not window.act_frame.isEnabled()
     assert not window.act_engrave.isEnabled()
 
-    panel.open_requested.emit("mock", "")
+    panel.open_requested.emit("laserpecker", "mock", "")
     assert _pump(app, lambda: window.act_engrave.isEnabled()), "still greyed out while connected"
 
     panel.close_requested.emit()
@@ -496,7 +496,7 @@ def test_frame_and_engrave_follow_the_connection(app, window):
 def test_a_dead_link_is_reported_rather_than_raised(app, monkeypatch, window):
     """Left unhandled the poll raises out of its timer once a second, and the panel keeps saying idle."""
     panel = window.device
-    panel.open_requested.emit("mock", "")
+    panel.open_requested.emit("laserpecker", "mock", "")
     assert _pump(app, lambda: panel._connected)
 
     class Dead:
@@ -535,20 +535,24 @@ def panel_ports(app):
     so its state has to be reset before a test can pretend anything about what is connected.
     """
     ports: list[str] = []
+    boards = [0]
     panel = DevicePanel()
     panel.watcher.stop()
     panel.watcher._ports = lambda: list(ports)
+    panel.watcher._galvos = lambda: boards[0]
     panel.watcher._seen = set()
+    panel.watcher._galvo_seen = False
+    panel.machine.setCurrentIndex(panel.machine.findData("laserpecker"))
     panel.mode.setCurrentIndex(panel.mode.findData("mock"))
     panel.address.clear()
     panel._picked = False
-    yield panel, ports
+    yield panel, ports, boards
     panel.shutdown()
 
 
 def test_a_plugged_in_engraver_is_offered(panel_ports):
     """Selected, not connected: opening the port stays the user's move."""
-    panel, ports = panel_ports
+    panel, ports, _boards = panel_ports
     assert panel.mode.currentData() == "mock"
 
     ports.append("/dev/ttyUSB0")
@@ -569,7 +573,7 @@ def test_a_plugged_in_engraver_is_offered(panel_ports):
 
 
 def test_a_connection_chosen_by_hand_is_left_alone(panel_ports):
-    panel, ports = panel_ports
+    panel, ports, _boards = panel_ports
     panel.mode.setCurrentIndex(panel.mode.findData("ble"))
     panel.address.setText("LaserPecker-1234")
     panel._chosen_by_hand()
@@ -582,7 +586,7 @@ def test_a_connection_chosen_by_hand_is_left_alone(panel_ports):
 
 def test_a_bluetooth_scan_offers_what_it_found(app, monkeypatch, panel_ports):
     """The scan runs on the worker thread — the panel only shows what came back."""
-    panel, _ = panel_ports
+    panel, _ports, _boards = panel_ports
     monkeypatch.setattr(
         "laserpecker.transport.scan_ble",
         lambda *_a, **_k: [("DD:0D:30:AA:BB:CC", "LaserPecker-IIAABBCC")],
@@ -598,7 +602,7 @@ def test_a_bluetooth_scan_offers_what_it_found(app, monkeypatch, panel_ports):
 
 
 def test_an_empty_bluetooth_scan_says_so(app, monkeypatch, panel_ports):
-    panel, _ = panel_ports
+    panel, _ports, _boards = panel_ports
     said: list[str] = []
     monkeypatch.setattr("laserpecker.transport.scan_ble", lambda *_a, **_k: [])
     monkeypatch.setattr(QMessageBox, "information", lambda _p, _t, text: said.append(text))
@@ -608,3 +612,92 @@ def test_an_empty_bluetooth_scan_says_so(app, monkeypatch, panel_ports):
     assert _pump(app, lambda: bool(said)), "an empty scan left the user without an answer"
     assert "switched on" in said[0]
     assert panel.scan_button.isEnabled()
+
+
+def test_the_picker_only_offers_links_a_machine_has(app):
+    """A galvo has no Bluetooth; offering it is a dead end the user finds by trying."""
+    panel = DevicePanel()
+    try:
+        assert panel.mode.findData("ble") >= 0, "a LaserPecker does have Bluetooth"
+
+        panel.machine.setCurrentIndex(panel.machine.findData("galvo"))
+        assert panel.mode.findData("ble") == -1
+        assert panel.mode.findData("usb") >= 0
+    finally:
+        panel.shutdown()
+
+
+def test_switching_machines_keeps_the_link_where_it_still_exists(app):
+    panel = DevicePanel()
+    try:
+        panel.mode.setCurrentIndex(panel.mode.findData("usb"))
+        panel.machine.setCurrentIndex(panel.machine.findData("galvo"))
+        assert panel.mode.currentData() == "usb", "USB exists on both, so the choice should survive"
+
+        panel.mode.setCurrentIndex(panel.mode.findData("mock"))
+        panel.machine.setCurrentIndex(panel.machine.findData("laserpecker"))
+        assert panel.mode.currentData() == "mock"
+    finally:
+        panel.shutdown()
+
+
+def test_a_galvo_has_no_address_row_at_all(app):
+    """The board is found by its USB identity, so an address field would be a question with no answer.
+
+    Hidden rather than greyed out: whatever such a field said would be claiming something about hardware
+    nobody has looked for yet — nothing is connected at the point this is on screen.
+    """
+    panel = DevicePanel()
+    try:
+        panel.machine.setCurrentIndex(panel.machine.findData("galvo"))
+        panel.mode.setCurrentIndex(panel.mode.findData("usb"))
+        assert panel.address.isHidden()
+        assert panel.scan_button.isHidden()
+
+        panel.machine.setCurrentIndex(panel.machine.findData("laserpecker"))
+        assert not panel.address.isHidden(), "the row has to come back for a machine that needs it"
+    finally:
+        panel.shutdown()
+
+
+def test_picking_the_galvo_connects_to_a_vector_device(app):
+    """The whole point of the picker: what it selects is what the worker opens."""
+    panel = DevicePanel()
+    try:
+        panel.open_requested.emit("galvo", "mock", "")
+        assert _pump(app, lambda: panel._connected), "the mock galvo never connected"
+        assert panel.worker.device.profile.paths
+        assert not panel.worker.device.profile.raster
+
+        panel.close_requested.emit()
+        assert _pump(app, lambda: not panel._connected)
+    finally:
+        panel.shutdown()
+
+
+def test_a_plugged_in_galvo_is_offered(panel_ports):
+    """A galvo has no serial port, so it is found by its USB identity instead — same rule otherwise."""
+    panel, _ports, boards = panel_ports
+    assert panel.machine.currentData() == "laserpecker"
+
+    boards[0] = 1
+    panel.watcher.scan()
+    assert panel.machine.currentData() == "galvo"
+    assert panel.mode.currentData() == "usb"
+    assert not panel._connected, "selected, not connected — opening the link stays the user's move"
+
+    panel.state_text.setText("untouched")
+    panel.watcher.scan()
+    assert panel.state_text.text() == "untouched", "the same board must not report itself twice"
+
+
+def test_a_galvo_does_not_override_a_choice_made_by_hand(panel_ports):
+    panel, _ports, boards = panel_ports
+    panel.machine.setCurrentIndex(panel.machine.findData("laserpecker"))
+    panel.mode.setCurrentIndex(panel.mode.findData("ble"))
+    panel._chosen_by_hand()
+
+    boards[0] = 1
+    panel.watcher.scan()
+    assert panel.machine.currentData() == "laserpecker"
+    assert panel.mode.currentData() == "ble"

@@ -90,8 +90,9 @@
 - **The window never reports what a vector job left out.** `VectorJob.skipped` names the bitmaps and fills
   a galvo cannot burn, and the CLI prints them, but the panel has no channel for a warning — only `failed`,
   which stops the job. So on a galvo the GUI silently burns less than the document shows.
-- **No device picker.** The panel only ever builds a `LaserPeckerDevice`; a galvo is reachable from the
-  CLI (`--galvo`) and from Python, not from the window.
+- **No lens settings behind the galvo picker.** The window can select a galvo now, but not tell it which
+  lens is on it, so it always connects at the 500 galvos/mm default — a guess that marks the right shape
+  at the wrong size. `galvos_per_mm` and the `.cor` file need somewhere to live before this is usable.
 - **No rotation from the canvas.** Only the menu's 90° steps; there is no rotation handle and no free
   angle. `Transform.rotate` is there, the interaction is not.
 - **No node editing** — a path's points cannot be moved once it is drawn. Together with grouping, the
@@ -108,8 +109,9 @@
 - Engraving hands the worker a deep copy; a second job cannot be queued while one runs (no spooler).
 - The device profile is not read by the canvas: the work area comes from the document, so a document
   larger than the machine bed is not flagged.
-- Autodetection covers USB only; Bluetooth has a Scan button, because there is nothing to poll.
-- Autodetection only offers the port; there is no setting for connecting to it straight away.
+- Autodetection covers USB only — LaserPecker serial ports and galvo boards; Bluetooth has a Scan button,
+  because there is nothing to poll.
+- Autodetection only offers what it found; there is no setting for connecting to it straight away.
 - Objects can be locked in the model and the GUI honours it, but nothing can *set* the flag — it only
   arrives through a file. A lock toggle needs the object list that does not exist yet.
 - The font scan reads every file in the font directories (~2 s on a full desktop) and is only cached for

@@ -24,6 +24,23 @@ class TransportError(Exception):
     pass
 
 
+def boards_present() -> int:
+    """How many LMC controllers are plugged in.
+
+    Reads the operating system's USB device table and touches no board — nothing here claims an interface
+    or sends a byte, so it is safe to call while one is marking. Returns zero rather than raising when
+    pyusb is missing or the platform will not enumerate: "none found" is the useful answer either way.
+    """
+    try:
+        import usb.core
+    except ImportError:
+        return 0
+    try:
+        return len(list(usb.core.find(idVendor=VENDOR, idProduct=PRODUCT, find_all=True)))
+    except Exception:
+        return 0
+
+
 class Transport(Protocol):
     def write(self, packet: bytes) -> None: ...
 

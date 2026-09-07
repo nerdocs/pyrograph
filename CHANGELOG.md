@@ -67,3 +67,5 @@
 - Galvo adapter (`pyrograph.devices.ezcad2`): field-centred origin, flipped Y, red-light framing.
 - The CLI picks raster or vector output from the device profile, and takes `--galvo`.
 - A vector job names what it could not express — bitmaps, and fills that burn as outlines only.
+- Device picker in the window: machine and connection are separate choices, and only working pairs show up.
+- A galvo controller plugged in selects itself, the same way a LaserPecker's serial port already did.

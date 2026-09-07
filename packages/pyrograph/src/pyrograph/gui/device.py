@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..devices import DeviceState, DeviceStatus, LaserPeckerDevice
+from ..devices import DeviceState, DeviceStatus, GalvoAdapter, LaserDevice, LaserPeckerDevice
 from ..document import Document
 from ..job import build_raster_job, build_vector_job
 from .discovery import PortWatcher
@@ -49,6 +49,19 @@ _ACTIVE = (DeviceState.RUNNING, DeviceState.PAUSED)
 
 UNKNOWN = -1
 """Percentage stand-in for a device that cannot say how far it has come; drawn as a busy bar."""
+
+_LINKS = {"mock": "Demo — no machine", "usb": "USB cable", "ble": "Bluetooth"}
+"""What the user picks between. "Mock" is what the code calls it; nobody outside the code says that."""
+
+_MACHINES = {
+    "laserpecker": ("LaserPecker", ("mock", "usb", "ble")),
+    "galvo": ("Galvo (EZCad2)", ("mock", "usb")),
+}
+"""What can be attached, and how each one can be reached.
+
+Kept as data because the two questions multiply: every machine would otherwise need its own branch in the
+panel. A galvo has no Bluetooth, so offering it would be a dead end the user only discovers by trying.
+"""
 
 _COLOUR = {
     DeviceState.OFFLINE: "#808080",
@@ -91,10 +104,10 @@ class DeviceWorker(QObject):
         self._timer.setInterval(POLL_MS)
         self._timer.timeout.connect(self._poll)
 
-    @Slot(str, str)
-    def open_device(self, mode: str, address: str) -> None:
+    @Slot(str, str, str)
+    def open_device(self, machine: str, mode: str, address: str) -> None:
         try:
-            self.device = self._connect(mode, address)
+            self.device = self._connect(machine, mode, address)
         except Exception as error:  # a driver mishap must not take the window down with it
             self.failed.emit(str(error))
             return
@@ -103,7 +116,15 @@ class DeviceWorker(QObject):
         self._timer.start()
 
     @staticmethod
-    def _connect(mode: str, address: str) -> LaserPeckerDevice:
+    def _connect(machine: str, mode: str, address: str) -> LaserDevice:
+        """Open the machine the user picked, over the link they picked.
+
+        The two are separate questions: a LaserPecker is reachable over serial or Bluetooth, a galvo only
+        over USB, and either can be pretended. Which combinations exist is the panel's business — by the
+        time it gets here, the choice has been made.
+        """
+        if machine == "galvo":
+            return GalvoAdapter.mock() if mode == "mock" else GalvoAdapter()
         if mode == "mock":
             return LaserPeckerDevice.mock()
         from laserpecker.device import LaserPecker
@@ -275,7 +296,7 @@ class DeviceWorker(QObject):
 class DevicePanel(QWidget):
     """Connect, align, engrave. Holds the worker thread and knows nothing about the protocol."""
 
-    open_requested = Signal(str, str)
+    open_requested = Signal(str, str, str)
     close_requested = Signal()
     scan_requested = Signal()
     frame_requested = Signal(object, int)
@@ -296,9 +317,14 @@ class DevicePanel(QWidget):
         self._picked = False
         """Whether the connection was chosen by hand. Autodetection then keeps out of the way."""
 
+        self.machine = QComboBox()
+        for value, (label, _links) in _MACHINES.items():
+            self.machine.addItem(label, value)
+        self.machine.setToolTip("Which engraver is attached")
+        self.machine.currentIndexChanged.connect(self._machine_changed)
+        self.machine.activated.connect(self._chosen_by_hand)
+
         self.mode = QComboBox()
-        for label, value in (("Mock (no hardware)", "mock"), ("USB", "usb"), ("Bluetooth", "ble")):
-            self.mode.addItem(label, value)
         self.mode.currentIndexChanged.connect(self._mode_changed)
         self.mode.activated.connect(self._chosen_by_hand)
         self.address = QLineEdit(placeholderText="auto")
@@ -330,12 +356,18 @@ class DevicePanel(QWidget):
         address_row.addWidget(self.address, 1)
         address_row.addWidget(self.scan_button)
 
-        connection = QFormLayout()
+        self._connection_form = connection = QFormLayout()
+        self._address_row = address_row
+        # Machine first: it decides which links exist below it, and it is what the user starts from.
+        connection.addRow("Machine", self.machine)
         connection.addRow("Connection", self.mode)
         connection.addRow("Address", address_row)
         connection.addRow(self.connect_button)
-        connection_box = QGroupBox("Connection")
+        # "Device", not "Connection": the box holds the machine as well as the link to it, and a group
+        # titled the same as a row inside it reads like a mistake.
+        connection_box = QGroupBox("Device")
         connection_box.setLayout(connection)
+        self._machine_changed()  # fills the link list, now that the form it hides a row in exists
 
         state = QHBoxLayout()
         state.addWidget(self.state_dot)
@@ -387,6 +419,7 @@ class DevicePanel(QWidget):
 
         self.watcher = PortWatcher(parent=self)
         self.watcher.appeared.connect(self._port_appeared)
+        self.watcher.galvo_appeared.connect(self._galvo_appeared)
         self.watcher.start()
 
     def set_document(self, document: Document) -> None:
@@ -414,14 +447,46 @@ class DevicePanel(QWidget):
         """
         if self._connected or self._picked:
             return
+        self.machine.setCurrentIndex(self.machine.findData("laserpecker"))
         self.mode.setCurrentIndex(self.mode.findData("usb"))
         self.address.setText(port)
-        self.state_text.setText(f"engraver on {port}")
+        self.state_text.setText("LaserPecker found — press Connect")
+
+    def _galvo_appeared(self) -> None:
+        """A galvo controller was plugged in. Same rule as a serial port: it selects, it does not connect.
+
+        There is no address to fill in — the board is found by its USB identity when the link opens.
+        """
+        if self._connected or self._picked:
+            return
+        self.machine.setCurrentIndex(self.machine.findData("galvo"))
+        self.mode.setCurrentIndex(self.mode.findData("usb"))
+        self.state_text.setText("Galvo found — press Connect")
+
+    def _machine_changed(self) -> None:
+        """Offer the links this machine actually has, keeping the current one where it still exists.
+
+        Rebuilding rather than disabling: a Bluetooth entry that can never be picked on a galvo is a
+        question the user has to answer twice.
+        """
+        _label, links = _MACHINES[self.machine.currentData()]
+        previous = self.mode.currentData()
+        self.mode.blockSignals(True)
+        self.mode.clear()
+        for link in links:
+            self.mode.addItem(_LINKS[link], link)
+        self.mode.setCurrentIndex(max(0, self.mode.findData(previous)))
+        self.mode.blockSignals(False)
+        self._mode_changed()
 
     def _mode_changed(self) -> None:
-        mode = self.mode.currentData()
+        machine, mode = self.machine.currentData(), self.mode.currentData()
+        # A galvo board is found by its USB identity, so the row goes away rather than sitting there
+        # greyed out — a disabled field whose only content explains why it is disabled is not a field.
+        self._connection_form.setRowVisible(self._address_row, machine != "galvo")
         self.address.setEnabled(mode != "mock")
-        self.address.setPlaceholderText("auto" if mode == "usb" else "name or address")
+        # Short enough to fit the field: an elided hint is worse than a terse one.
+        self.address.setPlaceholderText("automatic" if mode == "usb" else "name or MAC")
         self.scan_button.setVisible(mode == "ble")
 
     def scan(self) -> None:
@@ -464,7 +529,9 @@ class DevicePanel(QWidget):
         else:
             self.connect_button.setEnabled(False)
             self.state_text.setText("connecting…")
-            self.open_requested.emit(self.mode.currentData(), self.address.text().strip())
+            self.open_requested.emit(
+                self.machine.currentData(), self.mode.currentData(), self.address.text().strip()
+            )
 
     def frame(self) -> None:
         """Trace the document's bounding box so the workpiece can be aligned."""
@@ -492,6 +559,7 @@ class DevicePanel(QWidget):
         self._connected = True
         self.connect_button.setText("Disconnect")
         self.connect_button.setEnabled(True)
+        self.machine.setEnabled(False)
         self.mode.setEnabled(False)
         self.address.setEnabled(False)
         self.state_text.setText(f"{name}: connected")
@@ -502,6 +570,7 @@ class DevicePanel(QWidget):
         self._framing = False
         self.connect_button.setText("Connect")
         self.connect_button.setEnabled(True)
+        self.machine.setEnabled(True)
         self.mode.setEnabled(True)
         self._mode_changed()
         self._show_status(DeviceStatus(DeviceState.OFFLINE, message="not connected"))

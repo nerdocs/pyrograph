@@ -8,7 +8,7 @@ Nothing in this package has been verified against hardware.
 
 from .correction import read_scale, read_table
 from .device import GalvoDevice, Lens, MarkParams
-from .transport import MockTransport, TransportError, UsbTransport
+from .transport import MockTransport, TransportError, UsbTransport, boards_present
 
 __all__ = [
     "GalvoDevice",
@@ -17,6 +17,7 @@ __all__ = [
     "MockTransport",
     "TransportError",
     "UsbTransport",
+    "boards_present",
     "read_scale",
     "read_table",
 ]
