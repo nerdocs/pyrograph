@@ -44,7 +44,7 @@
   depth 50 marks a filled area solidly, a 0.1 mm outline barely, a 0.3 mm outline clearly. No other
   material has been measured.
 
-## Application (pyrograph)
+## Application (PyroGraph)
 
 - Document model done: geometry, objects, layers, undo, `.pyg` container, job creation
   (`docs/document-model.md`).
@@ -64,7 +64,15 @@
 - **No spooler.** `LaserDevice.run()` blocks until the job is handed over and the caller polls
   `status()`. A queue with priorities (`docs/architecture.md`) is only worth building once the GUI
   needs to stay responsive.
-- Only the LP2 profile exists; `pyrograph.devices` has no second adapter to prove the interface.
+- Only the LP2 profile exists; `pyrograph.devices` has no second adapter to prove the interface. The
+  facade was widened for one (`DeviceProfile.streams`, `DeviceStatus.progress = None`), but nothing sets
+  either yet, so both paths are held up by fake devices in the tests and by nothing else.
+- **No vector job.** `pyrograph.job` only builds `RasterJob`, because that is the LP2's native format. A
+  galvo has no raster format at all, so a second adapter needs paths first — this blocks `docs/galvo.md`
+  as much as the undecoded `0x40` line/fill command blocks vector output on the LP2.
+- **Galvo adapter not started.** Protocol read from balor/galvoplotter and written up (`docs/galvo.md`).
+  Open before coding: whether fiber and CO2 share one adapter with a source flag, and where per-machine
+  lens data (`galvos_per_mm`, the `.cor` file) lives, since neither can have a sensible default.
 - `TextObject` needs a font file path; no lookup by family name, no kerning.
 - Everything else: editor, spooler.
 

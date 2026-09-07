@@ -33,7 +33,8 @@ def _wait(device: LaserPeckerDevice, label: str) -> None:
         if status.state is not DeviceState.RUNNING:
             print(f"\r{label} done      ")
             return
-        print(f"\r{label} {status.progress}%", end="", flush=True)
+        done = "" if status.progress is None else f" {status.progress}%"
+        print(f"\r{label}{done}", end="", flush=True)
         time.sleep(0.5)
 
 
@@ -83,7 +84,9 @@ def cmd_engrave(args) -> int:
             continue
         device.run(job, name=f"{args.name}-{index}", progress=_upload_progress)
         print()
-        _wait(device, f"layer {layer.name!r}")
+        if not device.profile.streams:
+            # See DeviceProfile.streams: a streaming machine is already done here, nothing left to poll.
+            _wait(device, f"layer {layer.name!r}")
     device.close()
     return 0
 

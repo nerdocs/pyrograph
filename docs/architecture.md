@@ -29,12 +29,16 @@ GUI  ──►  Spooler  ──►  Driver  ──►  Connection  ──►  de
 
 Two device families exist and an abstraction must serve both:
 
-| | Streaming (GRBL, Ruida, K40) | Upload (LaserPecker, galvo) |
+| | Streaming (GRBL, Ruida, K40, galvo) | Upload (LaserPecker) |
 | --- | --- | --- |
 | Flow | host sends motion commands continuously | job is uploaded, device runs it alone |
-| Format | vector paths / G-code | bitmap + header |
-| Progress | host knows the position | ask the device |
+| Format | vector paths / G-code / command list | bitmap + header |
+| Progress | host counts what it has sent | ask the device |
 | Abort | stop the stream | send a command |
+
+A galvo looks like an upload device — it takes a command list in 3 KB blocks — but it starts executing that
+list while the rest is still arriving (`docs/galvo.md`). There is no moment where the job belongs to the
+machine and the host is free, which is what `DeviceProfile.streams` marks.
 
 A job therefore carries **raster and paths as equals**, and the driver picks what it can execute:
 
@@ -60,13 +64,27 @@ class LaserDevice(Protocol):
     def pause() / resume() / abort() / close()
 ```
 
-`run` deliberately does not return a handle: it blocks only until the job is uploaded and started, and
-progress is read back from `status()`. Whoever wants to wait decides where the waiting happens — a CLI
-polls, a GUI will let the spooler do it.
+`run` deliberately does not return a handle: it blocks until the device has taken the job over, and progress
+is read back from `status()`. Whoever wants to wait decides where the waiting happens — a CLI polls, a GUI
+will let the spooler do it.
 
-`DeviceProfile` holds work area, DPI steps and capability flags (raster, paths, rotary, autofocus). The GUI
-reads it instead of hard-coding device knowledge; `nearest_dpi()` snaps a layer's resolution to a step the
-machine actually has.
+For a machine with `profile.streams` set there is no earlier moment to return at than the end of the job, so
+`run` returns only once it is finished and there is nothing left to poll. The caller reads the flag rather
+than guessing; both the CLI and the device panel skip their wait loop for such a device.
+
+`DeviceProfile` holds work area, DPI steps and capability flags (raster, paths, rotary, autofocus, streams).
+The GUI reads it instead of hard-coding device knowledge; `nearest_dpi()` snaps a layer's resolution to a
+step the machine actually has.
+
+Two things follow from serving more than one device family, and both are load-bearing:
+
+* **A driver may answer "I don't know".** `DeviceStatus.progress` is `None` where no percentage exists — a
+  galvo controller reports busy or ready and nothing in between. Reporting that as `0` would be a lie the
+  GUI cannot see through; it draws a busy bar instead of a stalled one.
+* **The normalised state carries a device-specific word alongside it.** `DeviceStatus.state` is the same
+  five words everywhere, `message` is whatever that machine calls its sub-state ("held", "door open", an
+  error text). The GUI prints it and never branches on it. MeerK40t splits this the same way, into a major
+  and a minor state.
 
 Adapters live in `pyrograph.devices`; `laserpecker.py` first, `grbl.py` later. If the interface proves itself,
 it can become its own package.

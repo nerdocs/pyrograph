@@ -21,6 +21,7 @@ from pyrograph.document import (  # noqa: E402
     AddObject,
     Document,
     ImageObject,
+    LaserParams,
     Layer,
     Path,
     PathObject,
@@ -371,6 +372,73 @@ def test_a_job_is_not_over_before_the_machine_has_started(app):
     worker.device = Slow()
     worker._wait("Layer")
     assert worker.device.polls == 9, "the wait ended before the device did"
+
+
+def test_a_streaming_machine_is_not_polled_after_the_job(app, png_bytes):
+    """A galvo executes its command list while the list is still being sent, so run() returns done.
+
+    Polling such a machine finds it idle, which the wait loop cannot tell from "has not started yet" —
+    it would sit out the full start timeout after every layer before moving on.
+    """
+    from pyrograph.devices import DeviceProfile, DeviceState, DeviceStatus
+    from pyrograph.gui.device import DeviceWorker
+
+    class Streaming:
+        profile = DeviceProfile(
+            name="Galvo", width_mm=110.0, height_mm=110.0, dpi_steps=(254.0,), streams=True
+        )
+
+        def __init__(self):
+            self.ran = 0
+            self.polls = 0
+
+        def run(self, job, name="pyrograph", progress=None):
+            self.ran += 1
+
+        def status(self):
+            self.polls += 1
+            return DeviceStatus(DeviceState.IDLE)
+
+    document = Document(
+        layers=[
+            Layer(
+                params=LaserParams(dpi=254.0),
+                objects=[ImageObject(data=png_bytes, width_mm=10.0, height_mm=10.0)],
+            )
+        ]
+    )
+    worker = DeviceWorker()
+    worker.device = Streaming()
+    worker.engrave(document, "test")
+
+    assert worker.device.ran == 1, "the layer never reached the device"
+    assert worker.device.polls == 0, "a job that was already over was waited on anyway"
+
+
+def test_a_machine_without_a_percentage_reports_a_busy_bar(app):
+    """Not every controller counts its way to a hundred; a galvo only knows busy from ready.
+
+    The absence of a number has to travel as one, or the bar sits at 0% for the whole burn and reads
+    like a machine that never started.
+    """
+    from pyrograph.devices import DeviceState, DeviceStatus
+    from pyrograph.gui.device import UNKNOWN, DeviceWorker
+
+    class Vague:
+        def __init__(self):
+            self.polls = 0
+
+        def status(self):
+            self.polls += 1
+            return DeviceStatus(DeviceState.RUNNING if self.polls < 3 else DeviceState.IDLE)
+
+    seen = []
+    worker = DeviceWorker()
+    worker.device = Vague()
+    worker.progress.connect(lambda label, percent: seen.append(percent))
+    worker._wait("Layer")
+
+    assert UNKNOWN in seen, "a missing percentage was reported as a real one"
 
 
 def test_an_undecodable_image_does_not_break_the_redraw(drawing):

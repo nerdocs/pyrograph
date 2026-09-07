@@ -59,3 +59,6 @@
 - Shift extends a rubber-band selection instead of replacing it.
 - New in the File menu, and opening or importing asks before it discards unsaved work.
 - Undoing every change marks the document unmodified again; a malformed SVG reports itself as a bad import.
+- Device facade serves streaming machines: `DeviceProfile.streams`, and `DeviceStatus.progress` may be `None`.
+- A device that cannot report a percentage draws a busy bar instead of one stuck at zero.
+- EZCAD2 / BJJCZ galvo protocol documented from balor and galvoplotter (`docs/galvo.md`); no adapter yet.

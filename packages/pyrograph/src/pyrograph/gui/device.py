@@ -47,6 +47,9 @@ START_TIMEOUT_MS = 5000
 _ACTIVE = (DeviceState.RUNNING, DeviceState.PAUSED)
 """States that mean the job is not over — a paused machine has not finished, it is waiting."""
 
+UNKNOWN = -1
+"""Percentage stand-in for a device that cannot say how far it has come; drawn as a busy bar."""
+
 _COLOUR = {
     DeviceState.OFFLINE: "#808080",
     DeviceState.IDLE: "#2e9e4f",
@@ -191,7 +194,10 @@ class DeviceWorker(QObject):
                     name=f"{name}-{index}",
                     progress=lambda done, total: self.progress.emit("uploading", done * 100 // total),
                 )
-                self._wait(layer.name)
+                if not self.device.profile.streams:
+                    # A machine that streams has already finished by the time run() returns; waiting for
+                    # it to report itself running would only burn the start timeout once per layer.
+                    self._wait(layer.name)
         except Exception as error:
             self.failed.emit(str(error))
         finally:
@@ -218,7 +224,7 @@ class DeviceWorker(QObject):
                 started = True
             elif started or waited_ms >= START_TIMEOUT_MS:
                 return
-            self.progress.emit(f"engraving {label}", state.progress)
+            self.progress.emit(f"engraving {label}", UNKNOWN if state.progress is None else state.progress)
             QCoreApplication.processEvents()
             QThread.msleep(WAIT_STEP_MS)
             waited_ms += WAIT_STEP_MS
@@ -502,6 +508,12 @@ class DevicePanel(QWidget):
 
     def _show_progress(self, label: str, percent: int) -> None:
         self.progress.setVisible(bool(label))
+        if percent == UNKNOWN:
+            # A range of 0..0 is Qt's busy indicator: the machine is working, it just cannot say how far.
+            self.progress.setRange(0, 0)
+            self.progress.setFormat(label)
+            return
+        self.progress.setRange(0, 100)
         self.progress.setFormat(f"{label} %p%")
         self.progress.setValue(percent)
 

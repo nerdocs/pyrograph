@@ -4,6 +4,11 @@ The point of this layer is that the editor never learns which machine is attache
 :class:`DeviceProfile` for what the machine can do, sends a :class:`~pyrograph.job.RasterJob`, and reads a
 :class:`DeviceStatus` that means the same thing for every device — an LP2 reports mode 6 and a rate byte, a
 GRBL board reports something else entirely, and neither vocabulary belongs in the GUI.
+
+Two rules keep that promise from quietly becoming "whatever the LP2 does". The application asks the
+profile what a machine *is* instead of assuming, and a driver that cannot answer something says so —
+:attr:`DeviceStatus.progress` is ``None`` where a percentage does not exist, rather than a zero that
+reads like one. Adding a second kind of machine should mean writing an adapter, not editing the GUI.
 """
 
 from __future__ import annotations
@@ -28,10 +33,19 @@ class DeviceState(Enum):
 
 @dataclass(frozen=True)
 class DeviceStatus:
-    """Where a device is right now. ``progress`` is a percentage and only meaningful while running."""
+    """Where a device is right now — a normalised state plus whatever the machine calls it.
+
+    ``state`` is the same five words for every device; ``message`` is that device's own word for the
+    sub-state and belongs on screen next to it, not just when something went wrong: "held", "door open",
+    "cover", an error text. The GUI prints it verbatim and never branches on it.
+
+    ``progress`` is a percentage, and ``None`` when the machine cannot say. That is not a failure — a
+    galvo controller reports busy or ready and nothing in between. A caller that needs a number to show
+    must handle the absence of one rather than reading it as zero.
+    """
 
     state: DeviceState
-    progress: int = 0
+    progress: int | None = None
     message: str = ""
 
 
@@ -53,16 +67,32 @@ class DeviceProfile:
     rotary: bool = False
     autofocus: bool = False
 
+    streams: bool = False
+    """The device has no hand-over stage — sending the job *is* running it.
+
+    An LP2 uploads a raster, then starts it, so there is a moment where the job belongs to the machine
+    and :meth:`LaserDevice.run` can return while it burns. A galvo controller has no such moment: it
+    executes the command list while the list is still being sent. For those devices ``run`` returns only
+    when the job is over, and polling :meth:`LaserDevice.status` afterwards would just find an idle
+    machine — so the caller must not wait for one.
+    """
+
     def nearest_dpi(self, dpi: float) -> float:
         """The supported resolution closest to ``dpi`` — a layer may ask for anything."""
         return min(self.dpi_steps, key=lambda step: abs(step - dpi))
 
 
 class LaserDevice(Protocol):
-    """The interface an adapter implements. Blocking, like the drivers underneath it.
+    """The interface an adapter implements. Every method blocks, like the drivers underneath it.
 
-    ``run`` returns when the job has been handed over, not when it has been burnt — poll :meth:`status`
-    for that. Keeping it that way means the caller decides where the waiting happens.
+    Blocking here means synchronous, not that anything freezes: the caller already runs this on a thread
+    of its own, and the transports keep their own reader threads. Putting the concurrency above and below
+    this layer, never inside it, is what keeps an adapter readable.
+
+    ``run`` returns when the device has taken the job over — which for a machine with
+    :attr:`DeviceProfile.streams` set is only once the job is finished, because such a machine has no
+    earlier moment to return at. Whether to then poll :meth:`status` until the burn ends is therefore not
+    the caller's guess to make; it reads ``streams`` and does the one or the other.
     """
 
     profile: DeviceProfile
