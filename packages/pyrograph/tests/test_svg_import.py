@@ -151,6 +151,18 @@ def test_too_small_arc_radii_are_scaled_up():
     )
 
 
+def test_arc_flags_need_no_separator():
+    """A flag is one character, so an optimiser writes ``0130`` for "large 0, sweep 1, then 30"."""
+    assert _box(parse_path_data("M0 0a10 10 0 0120 0").bounds()) == pytest.approx(
+        (0.0, -10.0, 20.0, 10.0), abs=0.01
+    )
+
+
+def test_an_arc_flag_that_is_neither_zero_nor_one_is_an_error():
+    with pytest.raises(SvgImportError):
+        parse_path_data("M 0 0 A 10 10 0 2 1 20 0")
+
+
 def test_unterminated_path_data_is_an_error():
     with pytest.raises(SvgImportError):
         parse_path_data("M 0 0 L 10")
@@ -197,6 +209,21 @@ def test_paint_in_a_style_attribute_counts_too():
 
 def test_visibility_hidden_is_skipped():
     result = import_svg(_svg('<rect width="1" height="1" visibility="hidden"/>'))
+    assert list(result.document.objects()) == []
+
+
+def test_a_hidden_group_takes_its_contents_with_it():
+    # An Inkscape drawing keeps its switched-off layers in the file; engraving one burns what the
+    # author put away.
+    result = import_svg(_svg('<g display="none"><path d="M0 0 L 5 5" stroke="black"/></g>'))
+    assert list(result.document.objects()) == []
+
+
+def test_display_none_in_a_style_attribute_counts_too():
+    # Which is how Inkscape writes a hidden layer.
+    result = import_svg(
+        _svg('<g style="display:none"><path d="M0 0 L 5 5" stroke="black"/></g>')
+    )
     assert list(result.document.objects()) == []
 
 

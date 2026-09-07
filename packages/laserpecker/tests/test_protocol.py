@@ -6,6 +6,7 @@ encodings from executing its ``image_bg.wasm`` on synthetic images.
 
 from laserpecker import protocol as p
 from laserpecker.imaging import pack_bits
+from laserpecker.transport import _FrameAssembler
 
 
 def test_frame_layout_and_checksum():
@@ -101,3 +102,17 @@ def test_version_parser():
     version = p.parse_version(frame)
     assert version.sw_version == 370  # 0x0172 → LP2 range 370~399
     assert version.hw_version == 0x1234
+
+
+def test_frames_are_cut_apart_when_they_arrive_together():
+    assembler = _FrameAssembler()
+    assembler.feed(p.query(p.Query.STATUS) + p.stop())
+    assert assembler.get(0.0) == p.query(p.Query.STATUS)
+    assert assembler.get(0.0) == p.stop()
+
+
+def test_a_stray_header_byte_does_not_swallow_the_frames_behind_it():
+    """0xAA turns up in payload noise. Waiting for it to become a frame would never end."""
+    assembler = _FrameAssembler()
+    assembler.feed(b"\xaa\x00\x11\x22" + p.stop())
+    assert assembler.get(0.0) == p.stop()

@@ -227,6 +227,24 @@ def parse_path_data(d: str) -> Path:
             index += 1
         return values
 
+    def take_flag() -> int:
+        """One arc flag.
+
+        A flag is a single character and needs no separator after it, so ``a5 5 0 0130 0`` is legal SVG
+        and both of its flags sit inside one number token — which is exactly what an optimiser writes.
+        """
+        nonlocal index
+        if index >= len(tokens) or tokens[index][0]:
+            raise SvgImportError(f"path data ended mid-command: {d[:60]!r}")
+        text = tokens[index][1]
+        if text[0] not in "01":
+            raise SvgImportError(f"an arc flag is 0 or 1, got {text!r}")
+        if len(text) == 1:
+            index += 1
+        else:
+            tokens[index] = ("", text[1:])  # the rest of the token is the next value
+        return int(text[0])
+
     while index < len(tokens):
         if tokens[index][0]:
             command = tokens[index][0]
@@ -296,7 +314,9 @@ def parse_path_data(d: str) -> Path:
             segments.append(_quadratic_to_cubic(current, q, end))
             current, last_quadratic, last_cubic = end, q, None
         elif upper == "A":
-            rx, ry, rotation, large, sweep, x, y = take(7)
+            rx, ry, rotation = take(3)
+            large, sweep = take_flag(), take_flag()
+            x, y = take(2)
             end = Point(x + ox, y + oy)
             segments += _arc_to_cubics(current, rx, ry, rotation, bool(large), bool(sweep), end)
             current = end
@@ -389,20 +409,34 @@ _INITIAL_PAINT = ("black", "none", "1")
 _PAINT_PROPERTIES = ("fill", "stroke", "stroke-width")
 
 
+def _property(element: ET.Element, name: str) -> str | None:
+    """One presentation property, taken from ``style`` where it is set there and from the attribute else.
+
+    Both spellings mean the same thing in SVG and both turn up in the wild — Inkscape writes almost
+    everything into ``style``, an icon set almost everything as attributes.
+    """
+    style = element.get("style", "")
+    if style:
+        match = re.search(rf"(?:^|;)\s*{name}\s*:\s*([^;]+)", style)
+        if match:
+            return match.group(1).strip()
+    return element.get(name)
+
+
+def _hidden(element: ET.Element) -> bool:
+    """Whether the element is switched off and therefore draws nothing."""
+    return _property(element, "display") == "none" or _property(element, "visibility") == "hidden"
+
+
 def _paint(element: ET.Element, inherited: tuple[str, str, str]) -> tuple[str, str, str]:
     """The element's effective ``fill``, ``stroke`` and ``stroke-width``, falling back to what it inherits.
 
     All three inherit in SVG, and an icon set relies on it: the root sets the stroke, every path below it
     just draws.
     """
-    style = element.get("style", "")
     result = []
     for index, name in enumerate(_PAINT_PROPERTIES):
-        value = element.get(name)
-        if style:
-            match = re.search(rf"(?:^|;)\s*{name}\s*:\s*([^;]+)", style)
-            if match:
-                value = match.group(1).strip()
+        value = _property(element, name)
         result.append(value if value else inherited[index])
     return result[0], result[1], result[2]
 
@@ -435,13 +469,16 @@ def _walk(
         if not isinstance(child.tag, str) or not child.tag.startswith(f"{{{SVG_NS}}}"):
             continue  # comments, processing instructions, foreign namespaces
         tag = child.tag[len(SVG_NS) + 2 :]
+        if _hidden(child):
+            # Before the group branch below, so a hidden group takes its whole subtree with it. An
+            # Inkscape drawing keeps its switched-off layers in the file, and engraving one would burn
+            # what the author put away.
+            continue
         combined = parse_transform(child.get("transform")).then(transform)
         child_paint = _paint(child, paint)
 
         if tag in ("g", "svg", "a"):
             _walk(child, combined, base_dir, out, skipped, child_paint)
-            continue
-        if child.get("display") == "none" or child.get("visibility") == "hidden":
             continue
         if child_paint[0] == "none" and child_paint[1] == "none":
             # Neither filled nor stroked: the element draws nothing. Icon sets ship such paths as an

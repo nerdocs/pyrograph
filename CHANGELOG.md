@@ -77,3 +77,7 @@
 - Cloned galvo boards (`0x9980`) are found and named instead of looking like nothing plugged in.
 - Hatching: a filled shape is swept with parallel lines, so a QR code marks solid on a vector machine.
 - Fill spacing and angle per layer, next to the other laser parameters.
+- Fixed: a stray `0xAA` in the incoming bytes jammed the frame reader, losing every reply behind it.
+- Fixed: a galvo job with more than one pass uploaded each pass but only ever marked the first.
+- Fixed: a hidden SVG group was imported anyway, and `style="display:none"` — Inkscape's spelling — was ignored.
+- Fixed: SVG arc flags written without a separator (`a5 5 0 0130 0`) made the import fail.

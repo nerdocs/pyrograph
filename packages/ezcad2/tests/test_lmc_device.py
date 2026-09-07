@@ -130,6 +130,15 @@ def test_passes_repeat_the_whole_job(device):
     assert len(marks) == 3
 
 
+def test_every_pass_is_started(device):
+    """Uploading a pass is not running it: each one needs its own reset and execute."""
+    device.mark([[(0.0, 0.0), (5.0, 0.0)]], MarkParams(passes=3))
+
+    sent = opcodes(device.transport)
+    assert sent.count(p.RESET_LIST) == 3
+    assert sent.count(p.EXECUTE_LIST) == 3
+
+
 def test_parameters_reach_the_list(device):
     device.mark([[(0.0, 0.0), (5.0, 0.0)]], MarkParams(power=25.0, speed_mm_s=200.0, frequency_khz=20.0))
 

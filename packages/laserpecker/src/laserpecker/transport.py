@@ -67,6 +67,11 @@ class _FrameAssembler:
             # Resynchronise on the header if the device sent something unexpected.
             while self._buf and self._buf[0] != 0xAA:
                 del self._buf[0]
+            if len(self._buf) >= 2 and self._buf[1] not in (0xBB, 0xCC):
+                # A lone 0xAA that begins no frame. Waiting for it to become one never ends, and every
+                # frame queued behind it would be lost with it, so the byte goes and the search resumes.
+                del self._buf[0]
+                continue
             size = self._frame_size()
             if size is None:
                 return

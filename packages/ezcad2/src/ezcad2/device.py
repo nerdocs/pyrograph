@@ -254,15 +254,18 @@ class GalvoDevice:
         """
         params = params or MarkParams()
         self.init()
-        self._command(p.RESET_LIST)
-        self._blocks = 0
-        self._executing = False
         self.port_on(self.LASER_PIN)
         if self.source == "fiber":
             self._command(p.FIBER_SET_MO, 1)
         try:
             commands = self._mark_commands(polylines, params)
             for _ in range(max(1, params.passes)):
+                # Every pass is a list of its own. Without the reset the board still holds the one that
+                # has just finished, and _send — seeing itself already executing — never tells it to run
+                # the new one: the second pass would be uploaded and then silently never marked.
+                self._command(p.RESET_LIST)
+                self._blocks = 0
+                self._executing = False
                 self._send(commands, progress)
                 self.wait_idle()
         finally:
