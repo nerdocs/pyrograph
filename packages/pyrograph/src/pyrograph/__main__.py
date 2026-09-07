@@ -11,12 +11,14 @@ import argparse
 import sys
 import time
 
-from .devices import DeviceState, LaserPeckerDevice
+from .devices import DeviceState, GalvoAdapter, LaserDevice, LaserPeckerDevice
 from .document import import_svg, load_pyg, save_pyg
-from .job import build_raster_job
+from .job import build_raster_job, build_vector_job
 
 
-def _open_device(args) -> LaserPeckerDevice:
+def _open_device(args) -> LaserDevice:
+    if args.galvo:
+        return GalvoAdapter.mock() if args.mock else GalvoAdapter()
     if args.mock:
         return LaserPeckerDevice.mock()
     from laserpecker.device import LaserPecker
@@ -51,7 +53,8 @@ def cmd_import(args) -> int:
 def cmd_info(args) -> int:
     device = _open_device(args)
     profile, status = device.profile, device.status()
-    print(f"{profile.name}: {profile.width_mm}x{profile.height_mm} mm, dpi {profile.dpi_steps}")
+    kind = f"dpi {profile.dpi_steps}" if profile.dpi_steps else "vectors, no fixed resolution"
+    print(f"{profile.name}: {profile.width_mm:.1f}x{profile.height_mm:.1f} mm, {kind}")
     print(f"state: {status.state.value} {status.message}".rstrip())
     device.close()
     return 0
@@ -76,10 +79,15 @@ def cmd_engrave(args) -> int:
         if not layer.visible:
             continue
         layer.params.dpi = device.profile.nearest_dpi(layer.params.dpi)
-        job = build_raster_job(document, index)
+        if device.profile.raster:
+            job = build_raster_job(document, index)
+        else:
+            job = build_vector_job(document, index)
         if job is None:
             continue
-        print(f"layer {layer.name!r}: {job.raster.width}x{job.raster.height} px at {job.dpi} dpi")
+        print(f"layer {layer.name!r}: {_describe(job)}")
+        for note in getattr(job, "skipped", ()):
+            print(f"  not engraved: {note}", file=sys.stderr)
         if args.dry_run:
             continue
         device.run(job, name=f"{args.name}-{index}", progress=_upload_progress)
@@ -91,14 +99,25 @@ def cmd_engrave(args) -> int:
     return 0
 
 
+def _describe(job) -> str:
+    """One line about what a job holds — the two kinds measure themselves differently."""
+    if hasattr(job, "raster"):
+        return f"{job.raster.width}x{job.raster.height} px at {job.dpi} dpi"
+    points = sum(len(line) for line in job.polylines)
+    return f"{len(job.polylines)} outlines, {points} points, {job.bounds.width:.1f}x{job.bounds.height:.1f} mm"
+
+
 def _upload_progress(done: int, total: int) -> None:
-    print(f"\rupload {done * 100 // total}%", end="", flush=True)
+    print(f"\rsending {done * 100 // total}%", end="", flush=True)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pyrograph", description="Design, position and engrave")
     parser.add_argument("--mock", action="store_true", help="use a device that only exists in memory")
     parser.add_argument("--ble", help="connect over BLE to this address or name instead of USB")
+    parser.add_argument(
+        "--galvo", action="store_true", help="talk to an EZCad2 galvo controller instead of a LaserPecker"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     convert = sub.add_parser("import", help="convert an SVG into a .pyg document")

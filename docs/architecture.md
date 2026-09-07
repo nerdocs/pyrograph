@@ -9,7 +9,8 @@ Two packages in one repository:
 | Package | PyPI | Depends on |
 | --- | --- | --- |
 | `laserpecker` | driver — protocol, transports, imaging. No GUI, no device registry. | pyserial, bleak, numpy |
-| `pyrograph` | GUI — editor, device abstraction, adapters | laserpecker, PySide6 |
+| `ezcad2` | driver — BJJCZ LMC galvo boards. No GUI, no device registry. | pyusb |
+| `pyrograph` | GUI — editor, device abstraction, adapters | laserpecker, ezcad2, PySide6 |
 
 The driver stays usable on its own. Whoever only wants to script an LP2 should not inherit an abstraction layer.
 
@@ -40,15 +41,19 @@ A galvo looks like an upload device — it takes a command list in 3 KB blocks �
 list while the rest is still arriving (`docs/galvo.md`). There is no moment where the job belongs to the
 machine and the host is free, which is what `DeviceProfile.streams` marks.
 
-A job therefore carries **raster and paths as equals**, and the driver picks what it can execute:
+A job therefore carries **raster and paths as equals** — as two job types rather than one with two optional
+halves, since no device runs both and a job that carries the wrong one is a mistake worth catching:
 
 ```python
-@dataclass
-class Job:
-    raster: Raster | None       # dithered bitmap, position, DPI
-    paths: list[Path] | None    # vectors
-    params: JobParams           # power, depth, speed, repetitions
+RasterJob(raster, x_mm, y_mm, dpi, params)      # dithered bitmap and where it goes
+VectorJob(polylines, bounds, params, skipped)   # flattened outlines in document millimetres
 ```
+
+`build_raster_job` and `build_vector_job` both build from the document; neither converts the other. The
+caller asks `profile.raster` which one the machine wants.
+
+`VectorJob.skipped` names what could not be expressed — a bitmap has no outline, and a filled shape burns
+as an outline only, because hatching is not implemented. Reporting that beats dropping geometry silently.
 
 MeerK40t routes everything through a streaming vocabulary (`LineCut`, `RasterCut`, …) and lets upload devices
 buffer internally. That fits a K40; it fits the LP2 badly, whose native format *is* the raster.
@@ -86,8 +91,10 @@ Two things follow from serving more than one device family, and both are load-be
   error text). The GUI prints it and never branches on it. MeerK40t splits this the same way, into a major
   and a minor state.
 
-Adapters live in `pyrograph.devices`; `laserpecker.py` first, `grbl.py` later. If the interface proves itself,
-it can become its own package.
+Adapters live in `pyrograph.devices`: `laserpecker.py` and `ezcad2.py`. The second one is what made the
+interface honest — it forced out the assumptions that only held for an LP2 (a percentage always exists, a
+job is handed over before it runs, every machine has DPI steps). If the interface keeps holding, it can
+become its own package.
 
 ## Developing without hardware
 

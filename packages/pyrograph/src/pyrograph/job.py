@@ -4,17 +4,21 @@ This is the one place where millimetres become pixels. The document knows nothin
 knows nothing about documents. Here the layer's DPI decides the raster size, the layer's bounding box
 decides the origin, and the layer's parameters ride along unchanged.
 
-Only raster output exists so far, because that is the LP2's native format. Vector output waits for the
-line/fill command (`0x40`) to be decoded — see ``TODO.md``.
+Two outputs exist, because the two device families want opposite things. An LP2's native format *is* the
+raster, so a path gets stroked into pixels. A galvo has no raster format at all and wants the paths
+themselves. Neither is a conversion of the other, so both are built from the document rather than one
+from the other.
+
+The LP2 still cannot take vectors — its line/fill command (`0x40`) is undecoded (``TODO.md``).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from laserpecker.imaging import Raster, dither, pack_bits
 
-from .document import Document, ImageObject, LaserParams, Transform
+from .document import Document, ImageObject, LaserParams, Point, Rect, Transform
 
 MM_PER_INCH = 25.4
 
@@ -37,6 +41,22 @@ class RasterJob:
     @property
     def y_px(self) -> int:
         return max(0, int(self.y_mm * self.dpi / MM_PER_INCH))
+
+
+@dataclass
+class VectorJob:
+    """Flattened outlines in document millimetres, plus how they should burn.
+
+    Curves are already gone — a galvo moves in straight segments between two points, so the flattening
+    has to happen somewhere and doing it here keeps the driver free of geometry.
+    """
+
+    polylines: list[list[Point]]
+    bounds: Rect
+    params: LaserParams
+
+    skipped: list[str] = field(default_factory=list)
+    """What could not be expressed as an outline, by object name. See :func:`build_vector_job`."""
 
 
 def _stroke_width_mm(obj, layer) -> float:
@@ -163,3 +183,35 @@ def build_raster_job(
         dpi=layer.params.dpi,
         params=layer.params,
     )
+
+
+def build_vector_job(document: Document, layer_index: int, steps: int = 16) -> VectorJob | None:
+    """Flatten one layer to outlines. Returns ``None`` if the layer holds nothing a vector device can run.
+
+    Two things a document can express have no vector equivalent, and both are reported in
+    :attr:`VectorJob.skipped` rather than dropped in silence:
+
+    * **A bitmap.** There is no outline to follow. Engraving it needs the raster path.
+    * **A filled shape.** The outline is burnt, but the area inside is not — filling needs hatching, which
+      is not implemented. A QR code would come out as hollow squares, so the caller has to be told.
+    """
+    layer = document.layers[layer_index]
+    polylines: list[list[Point]] = []
+    skipped: list[str] = []
+    box = None
+    for obj in layer.objects:
+        label = obj.name or type(obj).__name__
+        if isinstance(obj, ImageObject):
+            skipped.append(f"{label} (bitmap)")
+            continue
+        lines = obj.local_path().transformed(obj.transform).polylines(steps)
+        if not lines:
+            continue
+        if obj.fill:
+            skipped.append(f"{label} (fill, outline only)")
+        polylines.extend(lines)
+        box = obj.bounds() if box is None else box.union(obj.bounds())
+
+    if not polylines or box is None:
+        return None
+    return VectorJob(polylines=polylines, bounds=box, params=layer.params, skipped=skipped)

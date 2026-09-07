@@ -7,7 +7,7 @@
 | [architecture.md](architecture.md) | Package split, layers, job model, device abstraction |
 | [document-model.md](document-model.md) | PyroGraph's document model, the `.pyg` format, job creation |
 | [gui.md](gui.md) | The application window: canvas, tools, panels, threading |
-| [galvo.md](galvo.md) | EZCAD2 / BJJCZ galvo protocol, read from existing implementations. No adapter yet |
+| [galvo.md](galvo.md) | EZCAD2 / BJJCZ galvo protocol and the `ezcad2` driver. Unverified on hardware |
 | [ideas.md](ideas.md) | Features worth having, none of them decided |
 
 Reference device: **LaserPecker 2**, firmware 3.16. The protocol is shared across LP1–LP5.

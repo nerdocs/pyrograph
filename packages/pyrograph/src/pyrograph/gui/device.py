@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from ..devices import DeviceState, DeviceStatus, LaserPeckerDevice
 from ..document import Document
-from ..job import build_raster_job
+from ..job import build_raster_job, build_vector_job
 from .discovery import PortWatcher
 
 POLL_MS = 1000
@@ -185,8 +185,8 @@ class DeviceWorker(QObject):
                 if not layer.visible or self._stop:
                     continue
                 layer.params.dpi = self.device.profile.nearest_dpi(layer.params.dpi)
-                self.progress.emit(f"rasterising {layer.name}", 0)
-                job = build_raster_job(document, index)
+                self.progress.emit(f"preparing {layer.name}", 0)
+                job = self._build_job(document, index)
                 if job is None:
                     continue
                 self.device.run(
@@ -204,6 +204,16 @@ class DeviceWorker(QObject):
             self._busy = False
             self.busy.emit(False)
             self.progress.emit("", 0)
+
+    def _build_job(self, document: Document, index: int):
+        """A raster or a set of outlines, depending on what the attached machine runs.
+
+        Neither is derived from the other: an LP2's native format is the bitmap, a galvo has no bitmap
+        format at all. The profile decides, so the panel never learns which machine is attached.
+        """
+        if self.device.profile.raster:
+            return build_raster_job(document, index)
+        return build_vector_job(document, index)
 
     def _wait(self, label: str) -> None:
         """Poll until the device stops running, letting queued pause/abort calls through in between.

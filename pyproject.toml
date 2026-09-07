@@ -5,4 +5,4 @@ members = ["packages/*"]
 dev = ["pytest>=8.0"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/laserpecker/tests", "packages/pyrograph/tests"]
+testpaths = ["packages/laserpecker/tests", "packages/ezcad2/tests", "packages/pyrograph/tests"]

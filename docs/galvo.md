@@ -1,7 +1,8 @@
 # Galvo lasers (EZCAD2 / BJJCZ)
 
-Notes for a second adapter. Nothing here has been run against hardware — this is a reading of two existing
-implementations, not a verified protocol description like `docs/protocol.md`.
+The protocol behind the `ezcad2` driver package and the `GalvoAdapter` in `pyrograph.devices`. Nothing
+here has been run against hardware — this is a reading of two existing implementations, not a verified
+protocol description like `docs/protocol.md`.
 
 ## What the hardware is
 
@@ -81,13 +82,28 @@ transferred as a file: the host reads it and writes it row by row with `WriteCor
 Without a correction file a blank table is written and the field is geometrically wrong. LightBurn generates
 one from a nine-point calibration; there is no way to derive it from the machine.
 
-## Open questions before writing the adapter
+## How it is implemented
 
-* **Vector output does not exist yet.** A galvo has no raster format; `pyrograph.job` only builds
-  `RasterJob`. Marking a bitmap means emitting it as points or lines, so the vector path has to come first.
-* **Fiber and CO2 differ** in initialisation: fiber uses MO and the Q-switch, CO2 uses FPK. One adapter with
-  a source flag, as galvoplotter does it, or two profiles — undecided.
-* **`galvos_per_mm` and the correction file cannot be guessed.** Both come from the physical lens and are
-  per-machine settings, not something a profile can ship with a default.
+`packages/ezcad2` is the driver — protocol, USB transport, correction files, list buffering — and knows
+nothing about documents. `pyrograph.devices.ezcad2.GalvoAdapter` puts it behind `LaserDevice`.
+
+The adapter owns two conventions the driver does not:
+
+* **The job is centred on the field.** A document counts from a corner, a galvo from the middle of its
+  field, and the middle is where a workpiece gets placed anyway.
+* **Y is flipped.** Documents count downwards, following SVG; the machine counts upwards.
+
+Fiber and CO2 share one driver with a `source` flag, as galvoplotter does — the difference is a handful of
+commands (MO and the Q-switch against FPK), not a different protocol.
+
+## What is still missing
+
+* **Filled shapes come out hollow.** Hatching is not implemented, so `build_vector_job` burns the outline
+  and reports the fill in `VectorJob.skipped`. A QR code is unusable this way — it is all fill.
+* **Bitmaps cannot be marked at all.** A galvo has no raster format; marking an image means emitting it as
+  a dot pattern, which nothing here does.
+* **`galvos_per_mm` and the correction file cannot be guessed.** Both belong to the physical lens.
+  `ezcad2.correction.read_scale` gets the scale out of a `.cor` file; there is no GUI for either yet, so
+  they can only be passed in code.
 * **Nothing is verifiable without hardware.** Field calibration in particular is not something a mock can
-  answer.
+  answer, and the mock cannot tell a sensible command list from a nonsensical one.

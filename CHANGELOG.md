@@ -62,3 +62,8 @@
 - Device facade serves streaming machines: `DeviceProfile.streams`, and `DeviceStatus.progress` may be `None`.
 - A device that cannot report a percentage draws a busy bar instead of one stuck at zero.
 - EZCAD2 / BJJCZ galvo protocol documented from balor and galvoplotter (`docs/galvo.md`); no adapter yet.
+- New `ezcad2` package: driver for BJJCZ LMC galvo boards — USB, list buffering, `.cor` files. No hardware.
+- `VectorJob` and `build_vector_job`: flattened outlines for devices with no raster format.
+- Galvo adapter (`pyrograph.devices.ezcad2`): field-centred origin, flipped Y, red-light framing.
+- The CLI picks raster or vector output from the device profile, and takes `--galvo`.
+- A vector job names what it could not express — bitmaps, and fills that burn as outlines only.

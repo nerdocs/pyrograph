@@ -5,6 +5,7 @@ script an LP2 should not inherit an abstraction layer.
 """
 
 from .base import DeviceProfile, DeviceState, DeviceStatus, LaserDevice
+from .ezcad2 import GalvoAdapter, profile_for
 from .laserpecker import LP2, LaserPeckerDevice
 
 __all__ = [
@@ -12,6 +13,8 @@ __all__ = [
     "DeviceProfile",
     "DeviceState",
     "DeviceStatus",
+    "GalvoAdapter",
     "LaserDevice",
     "LaserPeckerDevice",
+    "profile_for",
 ]

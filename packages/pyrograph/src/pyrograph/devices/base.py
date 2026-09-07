@@ -78,7 +78,13 @@ class DeviceProfile:
     """
 
     def nearest_dpi(self, dpi: float) -> float:
-        """The supported resolution closest to ``dpi`` — a layer may ask for anything."""
+        """The supported resolution closest to ``dpi`` — a layer may ask for anything.
+
+        A device that runs vectors has no resolution steps to snap to, so it takes the layer's own value
+        unchanged rather than pretending to have an opinion about it.
+        """
+        if not self.dpi_steps:
+            return dpi
         return min(self.dpi_steps, key=lambda step: abs(step - dpi))
 
 

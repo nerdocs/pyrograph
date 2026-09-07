@@ -64,15 +64,18 @@
 - **No spooler.** `LaserDevice.run()` blocks until the job is handed over and the caller polls
   `status()`. A queue with priorities (`docs/architecture.md`) is only worth building once the GUI
   needs to stay responsive.
-- Only the LP2 profile exists; `pyrograph.devices` has no second adapter to prove the interface. The
-  facade was widened for one (`DeviceProfile.streams`, `DeviceStatus.progress = None`), but nothing sets
-  either yet, so both paths are held up by fake devices in the tests and by nothing else.
-- **No vector job.** `pyrograph.job` only builds `RasterJob`, because that is the LP2's native format. A
-  galvo has no raster format at all, so a second adapter needs paths first — this blocks `docs/galvo.md`
-  as much as the undecoded `0x40` line/fill command blocks vector output on the LP2.
-- **Galvo adapter not started.** Protocol read from balor/galvoplotter and written up (`docs/galvo.md`).
-  Open before coding: whether fiber and CO2 share one adapter with a source flag, and where per-machine
-  lens data (`galvos_per_mm`, the `.cor` file) lives, since neither can have a sensible default.
+- **The galvo adapter has never touched hardware.** `packages/ezcad2` and `pyrograph.devices.ezcad2` are
+  built from balor and galvoplotter (`docs/galvo.md`), tested against a mock and nothing else. The USB
+  transport has never opened a real board, and marking moves a laser — first contact needs the red-light
+  framing tried before anything is fired.
+- **No hatching.** `build_vector_job` burns outlines only, so a filled shape comes out hollow and a QR
+  code is unusable on a galvo. The fill is reported in `VectorJob.skipped` rather than dropped silently,
+  but reporting it is not doing it.
+- **No lens settings anywhere.** `galvos_per_mm` and the `.cor` file belong to the physical lens and can
+  only be passed in code; there is no CLI flag and no settings dialog. `GalvoAdapter` therefore always
+  comes up with the 500 galvos/mm default, which is a guess about someone's machine.
+- **A galvo cannot engrave a bitmap at all.** No dot-pattern output exists, so an image is skipped.
+- The LP2 still has no vector path — its line/fill command (`0x40`) is undecoded, so `paths=False` there.
 - `TextObject` needs a font file path; no lookup by family name, no kerning.
 - Everything else: editor, spooler.
 
@@ -84,6 +87,11 @@
 - **Never run on hardware:** the wait loop now waits for the device to report *running* before an idle
   reply ends a job. The five-second grace period is a guess — measure how long an LP2 actually takes to
   switch modes after `print_start` and set it from that. A multi-layer document is the test.
+- **The window never reports what a vector job left out.** `VectorJob.skipped` names the bitmaps and fills
+  a galvo cannot burn, and the CLI prints them, but the panel has no channel for a warning — only `failed`,
+  which stops the job. So on a galvo the GUI silently burns less than the document shows.
+- **No device picker.** The panel only ever builds a `LaserPeckerDevice`; a galvo is reachable from the
+  CLI (`--galvo`) and from Python, not from the window.
 - **No rotation from the canvas.** Only the menu's 90° steps; there is no rotation handle and no free
   angle. `Transform.rotate` is there, the interaction is not.
 - **No node editing** — a path's points cannot be moved once it is drawn. Together with grouping, the

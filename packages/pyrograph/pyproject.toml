@@ -8,6 +8,7 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 dependencies = [
     "laserpecker>=0.1.0",
+    "ezcad2>=0.1.0",
     "PySide6>=6.7",
     "numpy>=1.26",
     "pillow>=10.0",
@@ -15,6 +16,12 @@ dependencies = [
     "segno>=1.6",
     "python-barcode>=0.15",
 ]
+
+[project.urls]
+Homepage = "https://github.com/nerdocs/pyrograph"
+Repository = "https://github.com/nerdocs/pyrograph"
+Issues = "https://github.com/nerdocs/pyrograph/issues"
+Documentation = "https://github.com/nerdocs/pyrograph/tree/main/docs"
 
 [project.scripts]
 pyrograph = "pyrograph.__main__:main"
@@ -27,7 +34,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyrograph"]
 
-# Local development resolves laserpecker from the workspace; the published
-# wheel keeps the plain version requirement above.
+# Local development resolves the driver packages from the workspace; the
+# published wheel keeps the plain version requirements above.
 [tool.uv.sources]
 laserpecker = { workspace = true }
+ezcad2 = { workspace = true }
