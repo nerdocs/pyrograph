@@ -131,3 +131,45 @@ def test_framing_traces_the_box_and_stops(device):
         device.stop_frame()
 
     assert device.driver._light_thread is None
+
+
+def test_the_cli_reads_the_lens_scale_from_a_correction_file(tmp_path, monkeypatch, capsys):
+    """A correction file carries the scale it was calibrated at — better than a flag nobody remembers."""
+    from argparse import Namespace
+
+    from pyrograph.__main__ import _open_galvo
+
+    monkeypatch.setattr("ezcad2.read_scale", lambda path: 800.0)
+    args = Namespace(
+        galvo=True, mock=True, cor_file=str(tmp_path / "lens.cor"), galvos_per_mm=None, source="fiber"
+    )
+    adapter = _open_galvo(args)
+
+    assert adapter.driver.lens.galvos_per_mm == 800.0
+    assert adapter.profile.width_mm == pytest.approx(0xFFFF / 800.0, abs=0.1)
+
+
+def test_the_cli_says_when_it_is_guessing_the_lens(capsys):
+    """Marking at the wrong size in silence is the failure worth a line on stderr."""
+    from argparse import Namespace
+
+    from pyrograph.__main__ import _open_galvo
+
+    _open_galvo(Namespace(galvo=True, mock=True, cor_file=None, galvos_per_mm=None, source="fiber"))
+
+    assert "assuming 500 galvos/mm" in capsys.readouterr().err
+
+
+def test_an_explicit_scale_wins_over_the_file(tmp_path, monkeypatch):
+    from argparse import Namespace
+
+    from pyrograph.__main__ import _open_galvo
+
+    monkeypatch.setattr("ezcad2.read_scale", lambda path: 800.0)
+    adapter = _open_galvo(
+        Namespace(
+            galvo=True, mock=True, cor_file=str(tmp_path / "lens.cor"), galvos_per_mm=250.0, source="fiber"
+        )
+    )
+
+    assert adapter.driver.lens.galvos_per_mm == 250.0

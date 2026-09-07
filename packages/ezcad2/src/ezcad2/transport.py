@@ -14,6 +14,17 @@ from . import protocol as p
 
 VENDOR = 0x9588
 PRODUCT = 0x9899
+CLONE_PRODUCT = 0x9980
+"""Cloned boards announce themselves with a different product ID until their FPGA has been loaded.
+
+They are common on cheap machines. This driver cannot do the loading — it needs either the vendor's
+firmware blobs or a ``.sys`` driver file off a Windows install — but it finds such a board and says so,
+which beats reporting that nothing is plugged in. MeerK40t's ``clone_init`` does the loading; a board it
+has already initialised in this power cycle answers here normally.
+"""
+
+PRODUCTS = {PRODUCT: "LMC controller", CLONE_PRODUCT: "cloned board"}
+
 WRITE_ENDPOINT = 0x02
 READ_ENDPOINT = 0x88
 
@@ -24,24 +35,37 @@ class TransportError(Exception):
     pass
 
 
-def boards_present() -> int:
-    """How many LMC controllers are plugged in.
+def find_boards() -> list[int]:
+    """The product ID of every galvo controller plugged in, cloned ones included.
 
     Reads the operating system's USB device table and touches no board — nothing here claims an interface
-    or sends a byte, so it is safe to call while one is marking. Returns zero rather than raising when
-    pyusb is missing or the platform will not enumerate: "none found" is the useful answer either way.
+    or sends a byte, so it is safe to call while one is marking. Returns an empty list rather than raising
+    when pyusb is missing or the platform will not enumerate: "none found" is the useful answer either way.
     """
     try:
         import usb.core
     except ImportError:
-        return 0
-    try:
-        return len(list(usb.core.find(idVendor=VENDOR, idProduct=PRODUCT, find_all=True)))
-    except Exception:
-        return 0
+        return []
+    found = []
+    for product in PRODUCTS:
+        try:
+            found += [product] * len(
+                list(usb.core.find(idVendor=VENDOR, idProduct=product, find_all=True))
+            )
+        except Exception:
+            continue
+    return found
+
+
+def boards_present() -> int:
+    """How many galvo controllers are plugged in."""
+    return len(find_boards())
 
 
 class Transport(Protocol):
+    needs_firmware: bool
+    """Whether this is a cloned board still waiting for its FPGA image."""
+
     def write(self, packet: bytes) -> None: ...
 
     def read(self) -> bytes: ...
@@ -64,13 +88,21 @@ class UsbTransport:
             raise TransportError("pyusb is not installed; a galvo needs it to talk over USB") from error
 
         self._util = usb.util
-        devices = list(usb.core.find(idVendor=VENDOR, idProduct=PRODUCT, find_all=True))
+        devices = []
+        for product in PRODUCTS:
+            devices += [
+                (product, device)
+                for device in usb.core.find(idVendor=VENDOR, idProduct=product, find_all=True)
+            ]
         if not devices:
-            raise TransportError("no LMC controller found on USB")
+            raise TransportError("no galvo controller found on USB")
         try:
-            self._device = devices[index]
+            product, self._device = devices[index]
         except IndexError:
             raise TransportError(f"only {len(devices)} controller(s) found, asked for number {index}")
+
+        self.needs_firmware = product == CLONE_PRODUCT
+        """A cloned board that has not been initialised will not answer. See :data:`CLONE_PRODUCT`."""
 
         try:
             self._device.set_configuration()
@@ -95,6 +127,11 @@ class UsbTransport:
         try:
             return bytes(self._device.read(endpoint=READ_ENDPOINT, size_or_buffer=p.REPLY, timeout=TIMEOUT_MS))
         except Exception as error:
+            if self.needs_firmware:
+                raise TransportError(
+                    "the board is a clone whose FPGA has not been loaded, so it does not answer. "
+                    "Initialise it with MeerK40t's 'clone_init' first; this driver cannot do it."
+                ) from error
             raise TransportError(f"read failed: {error}") from error
 
     def close(self) -> None:
@@ -117,6 +154,7 @@ class MockTransport:
     BUSY_POLLS = 3
 
     def __init__(self) -> None:
+        self.needs_firmware = False
         self.packets: list[bytes] = []
         """Every packet written, in order — single commands and list blocks alike."""
 

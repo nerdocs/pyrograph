@@ -160,3 +160,16 @@ def test_framing_traces_until_it_is_stopped(device):
     finally:
         device.stop_light()
     assert device._light_thread is None
+
+
+def test_a_cloned_board_counts_as_a_board():
+    """A clone that is invisible looks like nothing plugged in, which is the wrong thing to report."""
+    from ezcad2.transport import CLONE_PRODUCT, PRODUCT, PRODUCTS
+
+    assert set(PRODUCTS) == {PRODUCT, CLONE_PRODUCT}
+    assert PRODUCTS[CLONE_PRODUCT] == "cloned board"
+
+
+def test_a_mock_board_needs_no_firmware(device):
+    """The flag has to exist on every transport, or the read path branches on a missing attribute."""
+    assert device.transport.needs_firmware is False

@@ -488,9 +488,17 @@ class DevicePanel(QWidget):
         """
         if self._connected or self._picked:
             return
+        from ezcad2 import find_boards
+        from ezcad2.transport import CLONE_PRODUCT
+
         self.machine.setCurrentIndex(self.machine.findData("galvo"))
         self.mode.setCurrentIndex(self.mode.findData("usb"))
-        self.state_text.setText("Galvo found — press Connect")
+        # A cloned board turns up here but will not answer until its FPGA has been loaded, which this
+        # program cannot do — better said now than as a failure to connect.
+        clone = CLONE_PRODUCT in find_boards()
+        self.state_text.setText(
+            "Galvo clone found — needs initialising" if clone else "Galvo found — press Connect"
+        )
 
     def _open_settings(self) -> None:
         """Only the galvo has anything to configure, so only it gets the dialog.

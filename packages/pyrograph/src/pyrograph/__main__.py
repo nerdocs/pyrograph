@@ -18,7 +18,7 @@ from .job import build_raster_job, build_vector_job
 
 def _open_device(args) -> LaserDevice:
     if args.galvo:
-        return GalvoAdapter.mock() if args.mock else GalvoAdapter()
+        return _open_galvo(args)
     if args.mock:
         return LaserPeckerDevice.mock()
     from laserpecker.device import LaserPecker
@@ -27,7 +27,35 @@ def _open_device(args) -> LaserDevice:
     return LaserPeckerDevice(LaserPecker(BleTransport(args.ble)) if args.ble else LaserPecker())
 
 
-def _wait(device: LaserPeckerDevice, label: str) -> None:
+def _open_galvo(args) -> LaserDevice:
+    """A galvo with the lens it was told about.
+
+    The scale belongs to the physical lens, so a correction file is worth more than a flag: it carries the
+    scale it was calibrated at, and it is what straightens the field. ``--galvos-per-mm`` overrides it for
+    a machine that arrived without a file.
+    """
+    from ezcad2 import GalvoDevice, Lens, MockTransport, read_scale
+
+    scale = args.galvos_per_mm
+    if scale is None and args.cor_file:
+        try:
+            scale = read_scale(args.cor_file)
+        except (OSError, ValueError, IndexError) as error:
+            print(f"could not read the scale from {args.cor_file}: {error}", file=sys.stderr)
+    if scale is None:
+        scale = 500.0
+        print(
+            "no lens given, assuming 500 galvos/mm — the job will be the wrong size unless that is "
+            "your machine (see --cor-file)",
+            file=sys.stderr,
+        )
+
+    lens = Lens(galvos_per_mm=scale, cor_file=args.cor_file)
+    transport = MockTransport() if args.mock else None
+    return GalvoAdapter(GalvoDevice(transport, source=args.source, lens=lens))
+
+
+def _wait(device: LaserDevice, label: str) -> None:
     while True:
         status = device.status()
         if status.state is DeviceState.ERROR:
@@ -117,6 +145,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ble", help="connect over BLE to this address or name instead of USB")
     parser.add_argument(
         "--galvo", action="store_true", help="talk to an EZCad2 galvo controller instead of a LaserPecker"
+    )
+    galvo = parser.add_argument_group("galvo", "which lens is fitted — see docs/galvo.md")
+    galvo.add_argument("--cor-file", help="lens correction file (.cor), as supplied with the machine")
+    galvo.add_argument(
+        "--galvos-per-mm",
+        type=float,
+        help="scale of the fitted lens; read from --cor-file when that is given",
+    )
+    galvo.add_argument(
+        "--source", choices=("fiber", "co2"), default="fiber", help="which laser is in the machine"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

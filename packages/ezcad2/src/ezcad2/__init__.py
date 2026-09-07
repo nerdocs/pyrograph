@@ -9,7 +9,13 @@ Nothing in this package has been verified against hardware.
 from .calibration import Calibration, read_calibration
 from .correction import read_scale, read_table
 from .device import GalvoDevice, Lens, MarkParams
-from .transport import MockTransport, TransportError, UsbTransport, boards_present
+from .transport import (
+    MockTransport,
+    TransportError,
+    UsbTransport,
+    boards_present,
+    find_boards,
+)
 
 __all__ = [
     "Calibration",
@@ -21,6 +27,7 @@ __all__ = [
     "TransportError",
     "UsbTransport",
     "boards_present",
+    "find_boards",
     "read_scale",
     "read_table",
 ]

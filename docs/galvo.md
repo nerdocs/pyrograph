@@ -132,6 +132,8 @@ commands (MO and the Q-switch against FPK), not a different protocol.
   a dot pattern, which nothing here does.
 * **Nothing is verifiable without hardware.** Field calibration in particular is not something a mock can
   answer, and the mock cannot tell a sensible command list from a nonsensical one.
-* **Cloned boards are not found.** MeerK40t's `clone_loader.py` uploads an FPGA image to boards that
-  report `0x9980` instead of `0x9899`; this driver only knows the original identity, so a cloned board
-  does not turn up at all. Common on cheap machines.
+* **Cloned boards cannot be initialised here.** Boards that report `0x9980` instead of `0x9899` need an
+  FPGA image loaded before they answer anything. They are found and named, and the read that fails says
+  why — but doing the loading would mean shipping the vendor's firmware blobs or reading a `.sys` driver
+  off a Windows install, which is what MeerK40t's `clone_init` does. Use that first; a board it has
+  initialised in this power cycle answers here normally.

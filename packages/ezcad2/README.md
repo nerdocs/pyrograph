@@ -28,6 +28,10 @@ mock board; nothing else is proven.
 engineering of it exists, and LightBurn's implementation is closed. Supporting them means starting from USB
 captures against real hardware — a separate driver, not a flag in this one.
 
+**Cloned boards** — the ones reporting `0x9980` — are found and named, but they need an FPGA image loaded
+before they answer, and doing that would mean shipping the vendor's firmware. Load it with MeerK40t's
+`clone_init` first; after that they work here like any other board, until the machine is powered off.
+
 Also not implemented, because nothing here needs them yet: on-the-fly marking, the Z axis, rotary axes,
 general GPIO, wobble and 3D slicing.
 

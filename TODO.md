@@ -76,8 +76,11 @@
   `balormk/gui/corscene.py` — and stopped at the export, so the format is the only part left.
 - **The host-side field correction is unproven.** Bilinear inversion of a measured grid, tested against a
   synthetic distortion and never against a real lens. It is off by default and marked experimental.
-- **The CLI has no lens settings.** `--galvo` always runs at the 500 galvos/mm default; only the window
-  reads the stored correction file. A `--cor-file` flag would fix it.
+- **Cloned boards still need MeerK40t once.** `0x9980` boards are found and named, and the failing read
+  explains itself, but loading their FPGA would mean shipping vendor firmware or reading a Windows `.sys`
+  file. Neither belongs here, so `clone_init` remains a prerequisite for those machines.
+- The CLI and the window keep their galvo settings apart: `--cor-file` for one, `QSettings` for the other.
+  Fine while there is one setting each way, worth merging once there are more.
 - **A galvo cannot engrave a bitmap at all.** No dot-pattern output exists, so an image is skipped.
 - The LP2 still has no vector path — its line/fill command (`0x40`) is undecoded, so `paths=False` there.
 - `TextObject` needs a font file path; no lookup by family name, no kerning.
