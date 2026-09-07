@@ -71,9 +71,13 @@
 - **No hatching.** `build_vector_job` burns outlines only, so a filled shape comes out hollow and a QR
   code is unusable on a galvo. The fill is reported in `VectorJob.skipped` rather than dropped silently,
   but reporting it is not doing it.
-- **No lens settings anywhere.** `galvos_per_mm` and the `.cor` file belong to the physical lens and can
-  only be passed in code; there is no CLI flag and no settings dialog. `GalvoAdapter` therefore always
-  comes up with the 500 galvos/mm default, which is a guess about someone's machine.
+- **No way to produce a `.cor` file.** One has to come with the machine; nothing open source can make one
+  (`docs/galvo.md`). Worth knowing that MeerK40t got most of the way — test pattern and measurement UI in
+  `balormk/gui/corscene.py` — and stopped at the export, so the format is the only part left.
+- **The host-side field correction is unproven.** Bilinear inversion of a measured grid, tested against a
+  synthetic distortion and never against a real lens. It is off by default and marked experimental.
+- **The CLI has no lens settings.** `--galvo` always runs at the 500 galvos/mm default; only the window
+  reads the stored correction file. A `--cor-file` flag would fix it.
 - **A galvo cannot engrave a bitmap at all.** No dot-pattern output exists, so an image is skipped.
 - The LP2 still has no vector path — its line/fill command (`0x40`) is undecoded, so `paths=False` there.
 - `TextObject` needs a font file path; no lookup by family name, no kerning.
@@ -87,12 +91,10 @@
 - **Never run on hardware:** the wait loop now waits for the device to report *running* before an idle
   reply ends a job. The five-second grace period is a guess — measure how long an LP2 actually takes to
   switch modes after `print_start` and set it from that. A multi-layer document is the test.
-- **The window never reports what a vector job left out.** `VectorJob.skipped` names the bitmaps and fills
-  a galvo cannot burn, and the CLI prints them, but the panel has no channel for a warning — only `failed`,
-  which stops the job. So on a galvo the GUI silently burns less than the document shows.
-- **No lens settings behind the galvo picker.** The window can select a galvo now, but not tell it which
-  lens is on it, so it always connects at the 500 galvos/mm default — a guess that marks the right shape
-  at the wrong size. `galvos_per_mm` and the `.cor` file need somewhere to live before this is usable.
+- Warnings go through `DeviceWorker.warned` — a missing correction file, geometry a job left out. Only
+  the device panel raises them; nothing else in the window has a use for it yet.
+- **Settings exist only for the galvo.** `QSettings` now holds the lens data, but nothing else in the
+  program is configurable, and there is no general preferences dialog to hang the next thing on.
 - **No rotation from the canvas.** Only the menu's 90° steps; there is no rotation handle and no free
   angle. `Transform.rotate` is there, the interaction is not.
 - **No node editing** — a path's points cannot be moved once it is drawn. Together with grouping, the

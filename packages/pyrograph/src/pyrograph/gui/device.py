@@ -80,6 +80,12 @@ class DeviceWorker(QObject):
     status = Signal(object)
     progress = Signal(str, int)
     failed = Signal(str)
+    warned = Signal(str)
+    """Something is wrong but the work goes on — a missing correction file, geometry left out of a job.
+
+    Distinct from ``failed``, which ends what was being attempted. A warning that stopped the job would
+    be a failure; a failure reported quietly would be a lie."""
+
     busy = Signal(bool)
     framing = Signal(bool)
     """The device started or stopped tracing the outline."""
@@ -115,8 +121,7 @@ class DeviceWorker(QObject):
         self._poll()
         self._timer.start()
 
-    @staticmethod
-    def _connect(machine: str, mode: str, address: str) -> LaserDevice:
+    def _connect(self, machine: str, mode: str, address: str) -> LaserDevice:
         """Open the machine the user picked, over the link they picked.
 
         The two are separate questions: a LaserPecker is reachable over serial or Bluetooth, a galvo only
@@ -124,7 +129,17 @@ class DeviceWorker(QObject):
         time it gets here, the choice has been made.
         """
         if machine == "galvo":
-            return GalvoAdapter.mock() if mode == "mock" else GalvoAdapter()
+            from ezcad2 import GalvoDevice, MockTransport
+
+            from .settings import galvo_lens, galvo_source
+
+            lens, problems = galvo_lens()
+            for problem in problems:
+                # The lens is wrong, not the link. A stale path in a settings file should not stop the
+                # machine from opening — but the user has to hear that the field will be off.
+                self.warned.emit(problem)
+            transport = MockTransport() if mode == "mock" else None
+            return GalvoAdapter(GalvoDevice(transport, source=galvo_source(), lens=lens))
         if mode == "mock":
             return LaserPeckerDevice.mock()
         from laserpecker.device import LaserPecker
@@ -210,6 +225,13 @@ class DeviceWorker(QObject):
                 job = self._build_job(document, index)
                 if job is None:
                     continue
+                if getattr(job, "skipped", None):
+                    # Burning less than the document shows, without saying so, is the one outcome nobody
+                    # can check afterwards — the workpiece looks finished either way.
+                    self.warned.emit(
+                        f"{layer.name}: not everything can be engraved on this machine — "
+                        + "; ".join(job.skipped)
+                    )
                 self.device.run(
                     job,
                     name=f"{name}-{index}",
@@ -323,6 +345,12 @@ class DevicePanel(QWidget):
         self.machine.setToolTip("Which engraver is attached")
         self.machine.currentIndexChanged.connect(self._machine_changed)
         self.machine.activated.connect(self._chosen_by_hand)
+        self.settings_button = QPushButton("Settings…", clicked=self._open_settings)
+        self.settings_button.setToolTip("Which lens is fitted, and how to correct for it")
+        machine_row = QHBoxLayout()
+        machine_row.setContentsMargins(0, 0, 0, 0)
+        machine_row.addWidget(self.machine, 1)
+        machine_row.addWidget(self.settings_button)
 
         self.mode = QComboBox()
         self.mode.currentIndexChanged.connect(self._mode_changed)
@@ -359,7 +387,7 @@ class DevicePanel(QWidget):
         self._connection_form = connection = QFormLayout()
         self._address_row = address_row
         # Machine first: it decides which links exist below it, and it is what the user starts from.
-        connection.addRow("Machine", self.machine)
+        connection.addRow("Machine", machine_row)
         connection.addRow("Connection", self.mode)
         connection.addRow("Address", address_row)
         connection.addRow(self.connect_button)
@@ -411,6 +439,7 @@ class DevicePanel(QWidget):
         self.worker.status.connect(self._show_status)
         self.worker.progress.connect(self._show_progress)
         self.worker.failed.connect(self._show_error)
+        self.worker.warned.connect(self._show_warning)
         self.worker.busy.connect(self._set_busy)
         self.worker.framing.connect(self._set_framing)
         self.worker.found.connect(self._found)
@@ -463,6 +492,16 @@ class DevicePanel(QWidget):
         self.mode.setCurrentIndex(self.mode.findData("usb"))
         self.state_text.setText("Galvo found — press Connect")
 
+    def _open_settings(self) -> None:
+        """Only the galvo has anything to configure, so only it gets the dialog.
+
+        Its settings are not preferences: without the lens data the machine marks at a guessed size, so
+        this is closer to a required setup step than to a tweak.
+        """
+        from .settings import GalvoSettings
+
+        GalvoSettings(self).exec()
+
     def _machine_changed(self) -> None:
         """Offer the links this machine actually has, keeping the current one where it still exists.
 
@@ -484,6 +523,8 @@ class DevicePanel(QWidget):
         # A galvo board is found by its USB identity, so the row goes away rather than sitting there
         # greyed out — a disabled field whose only content explains why it is disabled is not a field.
         self._connection_form.setRowVisible(self._address_row, machine != "galvo")
+        # A LaserPecker needs no lens data; the button would open a dialog with nothing in it.
+        self.settings_button.setVisible(machine == "galvo")
         self.address.setEnabled(mode != "mock")
         # Short enough to fit the field: an elided hint is worse than a terse one.
         self.address.setPlaceholderText("automatic" if mode == "usb" else "name or MAC")
@@ -595,6 +636,10 @@ class DevicePanel(QWidget):
         self.progress.setRange(0, 100)
         self.progress.setFormat(f"{label} %p%")
         self.progress.setValue(percent)
+
+    def _show_warning(self, message: str) -> None:
+        """Say what went wrong without taking anything down — the job or the connection carries on."""
+        QMessageBox.warning(self, "Device", message)
 
     def _show_error(self, message: str) -> None:
         self.connect_button.setEnabled(True)

@@ -180,3 +180,15 @@ leave the machine tracing with nobody left to tell it otherwise.
 
 Node editing, rotation from the canvas, grouping, a spooler, device settings, merging an import into the
 open document. See `TODO.md` for the gaps and `docs/ideas.md` for what could come.
+
+**Some settings are not preferences.** A LaserPecker works out of the box; a galvo does not. Its scale and
+the shape of its field belong to the lens screwed onto it, no protocol reveals either, and without them
+every job is marked at a guessed size. So *Settings…* sits next to the machine picker, appears only for
+the machine that needs it, and the dialog leads with the correction file and says what happens without
+one. Values live in `QSettings` — a file under `~/.config` on Linux.
+
+**Warnings are not failures.** `DeviceWorker.warned` carries what went wrong when the work continues
+anyway: a correction file that has moved since it was chosen, or geometry a job could not express — a
+bitmap or a fill on a vector machine. `failed` ends what was being attempted; a warning that stopped the
+job would be a failure, and a failure reported quietly would be a lie. Burning less than the document
+shows, silently, is the one outcome nobody can check afterwards: the workpiece looks finished either way.

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import protocol as p
+from .calibration import Calibration
 from .correction import GRID, read_table
 from .transport import MockTransport, Transport, TransportError, UsbTransport
 
@@ -41,12 +42,21 @@ class MarkParams:
 class Lens:
     """What the attached lens does to the coordinate space.
 
-    ``galvos_per_mm`` is the whole calibration in one number and cannot be guessed — it belongs to the
-    physical lens. A ``.cor`` file records the one it was calibrated at (:func:`ezcad2.correction.read_scale`).
+    ``galvos_per_mm`` is the bulk of the calibration in one number and cannot be guessed — it belongs to
+    the physical lens. A ``.cor`` file records the one it was calibrated at
+    (:func:`ezcad2.correction.read_scale`), and is also what straightens the field.
     """
 
     galvos_per_mm: float = 500.0
     cor_file: str | Path | None = None
+
+    calibration: Calibration | None = None
+    """An optional second correction, applied on the host — see :mod:`ezcad2.calibration`.
+
+    Experimental, and normally unnecessary: the ``.cor`` table in the board is what a working machine
+    uses. This exists for a lens with no correction file at all, or one whose field is still visibly bent
+    with the file loaded.
+    """
 
     @property
     def field_mm(self) -> float:
@@ -203,6 +213,8 @@ class GalvoDevice:
     def _point(self, point) -> tuple[int, int]:
         """A point in millimetres from the field centre to device coordinates."""
         per_mm = self.lens.galvos_per_mm
+        if self.lens.calibration is not None:
+            return self.lens.calibration.to_galvo(point[0], point[1], per_mm)
         return p.galvos(point[0], per_mm), p.galvos(point[1], per_mm)
 
     def _send(self, commands: list[bytes], progress=None) -> None:

@@ -79,8 +79,36 @@ Every galvo lens distorts the field, so a correction table is mandatory. The `.c
 grid in one of two layouts — header `LMC1COR_1.0` means doubles, otherwise 32-bit integers. It is not
 transferred as a file: the host reads it and writes it row by row with `WriteCorLine 0x10`.
 
-Without a correction file a blank table is written and the field is geometrically wrong. LightBurn generates
-one from a nine-point calibration; there is no way to derive it from the machine.
+Without a correction file a blank table is written and the field is geometrically wrong.
+
+**Where a `.cor` comes from.** Almost always with the machine — on the supplied stick, or in the EZCad2
+folder — because it belongs to the lens that was fitted. **There is no open-source way to make one.**
+MeerK40t started an editor for it (`balormk/gui/corscene.py`: burn a test pattern, twelve measurement
+fields) but the export is still a placeholder that writes `b"Testing..."`, and its own dialog is titled
+"Doesn't currently export". LightBurn's nine-point wizard works and is closed and commercial. EZCad2 has
+a wizard too, and is Windows-only.
+
+`ezcad2.correction.read_scale` reads `galvos_per_mm` back out of a `.cor`, which is the only place that
+number can come from without measuring a test burn by hand.
+
+## Correcting the field on the host instead
+
+Balor's author found the board's own table did not fully linearise his machine and added a second
+correction computed on the host, from a grid burnt and measured with calipers. `ezcad2.calibration`
+implements that idea and `Lens.calibration` switches it on — **experimental, and normally unnecessary**.
+
+Balor interpolates with radial basis functions and needs scipy. This uses bilinear interpolation on the
+measured grid, inverted by Newton iteration: less clever, enough for barrel distortion, and it keeps the
+package's dependencies at pyusb alone.
+
+The table is balor's format, one measured point per line:
+
+```
+x_mm  y_mm  column  row  galvo_x_hex  galvo_y_hex
+```
+
+Reading it is strict on purpose — a hole in the grid names the missing row and column, because losing one
+measurement out of eighty-one is easy and finding out at mark time is not.
 
 ## How it is implemented
 
@@ -102,8 +130,8 @@ commands (MO and the Q-switch against FPK), not a different protocol.
   and reports the fill in `VectorJob.skipped`. A QR code is unusable this way — it is all fill.
 * **Bitmaps cannot be marked at all.** A galvo has no raster format; marking an image means emitting it as
   a dot pattern, which nothing here does.
-* **`galvos_per_mm` and the correction file cannot be guessed.** Both belong to the physical lens.
-  `ezcad2.correction.read_scale` gets the scale out of a `.cor` file; there is no GUI for either yet, so
-  they can only be passed in code.
 * **Nothing is verifiable without hardware.** Field calibration in particular is not something a mock can
   answer, and the mock cannot tell a sensible command list from a nonsensical one.
+* **Cloned boards are not found.** MeerK40t's `clone_loader.py` uploads an FPGA image to boards that
+  report `0x9980` instead of `0x9899`; this driver only knows the original identity, so a cloned board
+  does not turn up at all. Common on cheap machines.

@@ -60,10 +60,11 @@ def _read_grid(f, code: str, size: int) -> list[tuple[int, int]]:
 
 
 def read_scale(path: str | Path) -> float:
-    """The millimetres-per-galvo scale the file was calibrated at.
+    """The ``galvos_per_mm`` the file was calibrated at.
 
-    Worth reading because it is the one place ``galvos_per_mm`` can come from without measuring a test
-    burn by hand — the file and the lens belong together.
+    Worth reading because it is the one place that number can come from without measuring a test burn by
+    hand — the file and the lens belong together. The direction is not guesswork: MeerK40t derives the
+    field size from the same value as ``65536 / scale``, so a larger scale is a smaller field.
     """
     with open(path, "rb") as f:
         label = f.read(_LABEL_BYTES)

@@ -69,3 +69,7 @@
 - A vector job names what it could not express — bitmaps, and fills that burn as outlines only.
 - Device picker in the window: machine and connection are separate choices, and only working pairs show up.
 - A galvo controller plugged in selects itself, the same way a LaserPecker's serial port already did.
+- Galvo settings dialog: correction file, scale and laser source, kept across sessions.
+- Loading a `.cor` file fills in the scale it was calibrated at, so the field size stops being a guess.
+- Experimental host-side field correction from a measured grid, for lenses with no correction file.
+- The window warns instead of staying quiet when a job leaves geometry out or the lens data is missing.
