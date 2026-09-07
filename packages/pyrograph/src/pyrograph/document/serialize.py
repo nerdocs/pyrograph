@@ -168,7 +168,7 @@ def load_pyg(path: str | os.PathLike) -> Document:
     with zipfile.ZipFile(path) as archive:
         data = json.loads(archive.read("project.json"))
         if data.get("format") != FORMAT:
-            raise ValueError("not a pyrograph document")
+            raise ValueError("not a PyroGraph document")
         if data.get("version") != VERSION:
             raise ValueError(f"unsupported document version: {data.get('version')}")
         root = ET.fromstring(archive.read("document.svg"))

@@ -1,11 +1,11 @@
-# pyrograph
+# PyroGraph
 
 Laser engraving software for Linux, macOS and Windows. Draw a job, place it on the bed, burn it.
 
 Built for the **LaserPecker 2** (firmware 3.16). The protocol is the same across LP1–LP5, and other
 engravers can be added.
 
-![The pyrograph window](docs/screenshot.png)
+![The PyroGraph window](docs/screenshot.png)
 
 ## Why
 
@@ -14,7 +14,7 @@ phone app, and that is a bad way to place a motif to the millimetre.
 
 The second reason is privacy. Engraving happens over a cable, between a PC and a machine on the desk. That
 does not need an account or an internet connection, and with a closed-source app you cannot check what it
-does with your files. pyrograph talks to the engraver and to nothing else — no telemetry, no update check,
+does with your files. PyroGraph talks to the engraver and to nothing else — no telemetry, no update check,
 no account. There is no HTTP library anywhere in the dependencies.
 
 ## What it does

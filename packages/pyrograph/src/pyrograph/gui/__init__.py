@@ -24,7 +24,7 @@ def run(path: str | None = None) -> int:
     from .window import MainWindow
 
     app = QApplication(sys.argv[:1])
-    app.setApplicationName("pyrograph")
+    app.setApplicationName("PyroGraph")
     window = MainWindow(path)
     window.show()
     return app.exec()

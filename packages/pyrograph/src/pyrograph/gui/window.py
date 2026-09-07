@@ -270,7 +270,7 @@ class MainWindow(QMainWindow):
         self.act_paste.setEnabled(bool(self._clipboard))
         self._selection_changed()
         name = FilePath(self.path).name if self.path else "untitled"
-        self.setWindowTitle(f"{'*' if self.dirty else ''}{name} — pyrograph")
+        self.setWindowTitle(f"{'*' if self.dirty else ''}{name} — PyroGraph")
 
     def undo(self) -> None:
         self.undo_stack.undo()
@@ -381,7 +381,7 @@ class MainWindow(QMainWindow):
             return True
         answer = QMessageBox.question(
             self,
-            "pyrograph",
+            "PyroGraph",
             "The document has unsaved changes.",
             QMessageBox.StandardButton.Save
             | QMessageBox.StandardButton.Discard
@@ -398,7 +398,7 @@ class MainWindow(QMainWindow):
     def open_file(self) -> None:
         if not self._confirm_discard():
             return
-        path, _ = QFileDialog.getOpenFileName(self, "Open", "", "pyrograph documents (*.pyg)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open", "", "PyroGraph documents (*.pyg)")
         if path:
             self._load(path)
 
@@ -444,7 +444,7 @@ class MainWindow(QMainWindow):
         return True
 
     def save_as(self) -> bool:
-        path, _ = QFileDialog.getSaveFileName(self, "Save as", "", "pyrograph documents (*.pyg)")
+        path, _ = QFileDialog.getSaveFileName(self, "Save as", "", "PyroGraph documents (*.pyg)")
         if not path:
             return False
         previous = self.path
