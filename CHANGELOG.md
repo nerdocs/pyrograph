@@ -75,3 +75,5 @@
 - The window warns instead of staying quiet when a job leaves geometry out or the lens data is missing.
 - `pyrograph --galvo` takes `--cor-file`, `--galvos-per-mm` and `--source`, and says when it is guessing.
 - Cloned galvo boards (`0x9980`) are found and named instead of looking like nothing plugged in.
+- Hatching: a filled shape is swept with parallel lines, so a QR code marks solid on a vector machine.
+- Fill spacing and angle per layer, next to the other laser parameters.

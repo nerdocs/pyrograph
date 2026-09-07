@@ -68,9 +68,11 @@
   built from balor and galvoplotter (`docs/galvo.md`), tested against a mock and nothing else. The USB
   transport has never opened a real board, and marking moves a laser — first contact needs the red-light
   framing tried before anything is fired.
-- **No hatching.** `build_vector_job` burns outlines only, so a filled shape comes out hollow and a QR
-  code is unusable on a galvo. The fill is reported in `VectorJob.skipped` rather than dropped silently,
-  but reporting it is not doing it.
+- **Hatching is one direction only.** No cross-hatch, no offset between passes, and every pass retraces
+  the same lines — two passes burn the same grooves twice instead of crossing them. A second angle per
+  layer would cover most of it.
+- **Hatching does not know the spot size.** The spacing is whatever the layer says; nothing checks it
+  against what the machine actually burns, so too wide leaves visible stripes and too narrow overheats.
 - **No way to produce a `.cor` file.** One has to come with the machine; nothing open source can make one
   (`docs/galvo.md`). Worth knowing that MeerK40t got most of the way — test pattern and measurement UI in
   `balormk/gui/corscene.py` — and stopped at the export, so the format is the only part left.

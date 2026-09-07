@@ -169,3 +169,26 @@ then per file:
 So the content is a **baked raster plus parameters**, the same bytes that go over the wire — no editable
 geometry. Importing one can therefore only ever yield a bitmap and its settings, never the objects that
 produced it. Export is the useful direction; the editable exchange format is `.lp2`.
+
+## Filling an area on a machine that cannot raster
+
+A raster device fills a shape by darkening pixels. A vector device — a galvo — has no such thing: it can
+only move the spot, so an area is burnt by sweeping back and forth across the inside. `pyrograph.hatch`
+does that sweeping, and `build_vector_job` calls it for every object with `fill` set.
+
+The sweep uses the even-odd rule, the same one the rasteriser uses, so a subpath inside another cuts a
+hole rather than adding to it: the counter of an "o" stays unburnt, and so do the light modules of a QR
+code. Scan lines count each edge on a half-open interval, which is what stops a line passing exactly
+through a vertex from crossing twice and inverting everything to the right of it — the failure mode that
+turns a diamond inside out.
+
+Lines alternate direction, so the spot starts each one where it finished the last instead of flying back
+across the shape every time.
+
+Two layer parameters drive it. `hatch_mm` is the spacing — roughly the width the spot burns is what closes
+the area without going over it twice — and `hatch_angle` turns the sweep. A spacing of zero means no fill:
+the outline is burnt instead and the object is named in `VectorJob.skipped`, because that is less than the
+document says.
+
+A hatched shape is not also outlined unless it carries a stroke width of its own, the same rule the
+rasteriser follows. Outlining a code would fatten every module by a line width.

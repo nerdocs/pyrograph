@@ -52,7 +52,23 @@ class LayerPanel(QWidget):
         self.speed.setSpecialValueText("device default")
         self.dpi = QDoubleSpinBox(minimum=1.0, maximum=4000.0, decimals=0, suffix=" dpi")
         self.line_width = QDoubleSpinBox(minimum=0.01, maximum=10.0, decimals=2, singleStep=0.05, suffix=" mm")
-        self._fields = (self.power, self.depth, self.passes, self.speed, self.dpi, self.line_width)
+        self.hatch = QDoubleSpinBox(minimum=0.0, maximum=10.0, decimals=2, singleStep=0.05, suffix=" mm")
+        self.hatch.setSpecialValueText("outline only")
+        self.hatch.setToolTip(
+            "How far apart the lines are that fill a solid area on a machine that cannot raster"
+        )
+        self.hatch_angle = QDoubleSpinBox(minimum=-90.0, maximum=90.0, decimals=0, suffix="°")
+        self.hatch_angle.setToolTip("Which way those lines run; zero is horizontal")
+        self._fields = (
+            self.power,
+            self.depth,
+            self.passes,
+            self.speed,
+            self.dpi,
+            self.line_width,
+            self.hatch,
+            self.hatch_angle,
+        )
         for field in self._fields:
             field.editingFinished.connect(self._apply_params)
 
@@ -63,6 +79,8 @@ class LayerPanel(QWidget):
         form.addRow("Speed", self.speed)
         form.addRow("Resolution", self.dpi)
         form.addRow("Line width", self.line_width)
+        form.addRow("Fill spacing", self.hatch)
+        form.addRow("Fill angle", self.hatch_angle)
         box = QGroupBox("Laser parameters")
         box.setLayout(form)
 
@@ -111,6 +129,8 @@ class LayerPanel(QWidget):
         self.speed.setValue(params.speed_mm_s)
         self.dpi.setValue(params.dpi)
         self.line_width.setValue(params.line_width_mm)
+        self.hatch.setValue(params.hatch_mm)
+        self.hatch_angle.setValue(params.hatch_angle)
         self._loading = False
 
     def _apply_params(self) -> None:
@@ -123,6 +143,8 @@ class LayerPanel(QWidget):
             speed_mm_s=self.speed.value(),
             dpi=self.dpi.value(),
             line_width_mm=self.line_width.value(),
+            hatch_mm=self.hatch.value(),
+            hatch_angle=self.hatch_angle.value(),
         )
         if params == self._document.layers[self.current_index].params:
             return  # focus left a spin box nobody touched

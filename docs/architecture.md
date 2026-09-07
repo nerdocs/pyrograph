@@ -53,7 +53,7 @@ VectorJob(polylines, bounds, params, skipped)   # flattened outlines in document
 caller asks `profile.raster` which one the machine wants.
 
 `VectorJob.skipped` names what could not be expressed — a bitmap has no outline, and a filled shape burns
-as an outline only, because hatching is not implemented. Reporting that beats dropping geometry silently.
+as an outline only, when hatching has been switched off. Reporting that beats dropping geometry silently.
 
 MeerK40t routes everything through a streaming vocabulary (`LineCut`, `RasterCut`, …) and lets upload devices
 buffer internally. That fits a K40; it fits the LP2 badly, whose native format *is* the raster.

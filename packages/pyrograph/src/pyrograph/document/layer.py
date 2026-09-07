@@ -39,6 +39,18 @@ class LaserParams:
     barely visible where a filled square is solid black.
     """
 
+    hatch_mm: float = 0.1
+    """How far apart the lines are that fill a solid area on a vector machine.
+
+    A galvo cannot darken an area, only sweep the spot across it, so a filled shape is burnt as parallel
+    lines this far apart (:mod:`pyrograph.hatch`). Roughly the width the spot burns is what closes the
+    area without going over it twice: wider leaves stripes, narrower costs time and heat. A raster device
+    ignores this — it fills by darkening pixels.
+    """
+
+    hatch_angle: float = 0.0
+    """Which way those lines run, in degrees. Zero is horizontal."""
+
 
 @dataclass
 class Layer:

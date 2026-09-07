@@ -701,3 +701,22 @@ def test_a_galvo_does_not_override_a_choice_made_by_hand(panel_ports):
     panel.watcher.scan()
     assert panel.machine.currentData() == "laserpecker"
     assert panel.mode.currentData() == "ble"
+
+
+def test_the_fill_spacing_is_editable_and_undoable(window):
+    """Hatching is per layer, so it belongs next to the other laser parameters."""
+    window.layers.hatch.setValue(0.3)
+    window.layers.hatch_angle.setValue(45.0)
+    window.layers._apply_params()
+
+    assert window.document.layers[0].params.hatch_mm == pytest.approx(0.3)
+    assert window.document.layers[0].params.hatch_angle == pytest.approx(45.0)
+
+    window.undo()
+    assert window.document.layers[0].params.hatch_mm == pytest.approx(0.1)
+
+
+def test_zero_spacing_reads_as_outline_only(window):
+    """A spacing of nothing is not a spacing — the box says what it means instead of showing 0.00 mm."""
+    window.layers.hatch.setValue(0.0)
+    assert window.layers.hatch.text() == "outline only"

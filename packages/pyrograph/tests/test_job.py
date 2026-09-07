@@ -155,13 +155,13 @@ def test_a_vector_job_flattens_curves():
 
 
 def test_a_vector_job_reports_what_it_cannot_express(png_bytes):
-    """Dropping geometry in silence is worse than burning less than asked — the caller has to know."""
+    """A bitmap has no outline to follow — dropping it in silence would burn less than was asked."""
     document = Document(
         layers=[
             Layer(
                 objects=[
                     ImageObject(data=png_bytes, width_mm=10.0, height_mm=10.0, name="photo"),
-                    PathObject(path=Path([MoveTo(Point(0, 0)), LineTo(Point(5, 5))]), fill=True, name="blob"),
+                    PathObject(path=Path.rect(0, 0, 5, 5), name="frame"),
                 ]
             )
         ]
@@ -170,8 +170,65 @@ def test_a_vector_job_reports_what_it_cannot_express(png_bytes):
     job = build_vector_job(document, 0)
 
     assert any("photo" in note and "bitmap" in note for note in job.skipped)
-    assert any("blob" in note and "fill" in note for note in job.skipped)
-    assert len(job.polylines) == 1, "the filled shape's outline is still burnt"
+    assert job.polylines, "the path still made it into the job"
+
+
+def test_a_filled_shape_is_hatched():
+    """A vector machine cannot darken an area, so the inside has to be swept with lines."""
+    document = Document(
+        layers=[
+            Layer(
+                params=LaserParams(hatch_mm=1.0),
+                objects=[PathObject(path=Path.rect(0, 0, 10, 10), fill=True)],
+            )
+        ]
+    )
+
+    job = build_vector_job(document, 0)
+
+    assert len(job.polylines) >= 9, "a 10 mm square at 1 mm spacing needs about ten passes"
+    assert not job.skipped
+    for line in job.polylines:
+        assert len(line) == 2, "a hatch line runs straight across"
+
+
+def test_a_hatch_spacing_of_zero_says_the_fill_was_left_out():
+    """Switching hatching off is allowed, but the shape then comes out hollow and that has to be said."""
+    document = Document(
+        layers=[
+            Layer(
+                params=LaserParams(hatch_mm=0.0),
+                objects=[PathObject(path=Path.rect(0, 0, 10, 10), fill=True, name="patch")],
+            )
+        ]
+    )
+
+    job = build_vector_job(document, 0)
+
+    assert any("patch" in note and "fill" in note for note in job.skipped)
+
+
+def test_a_filled_shape_without_a_stroke_is_not_outlined():
+    """The same rule the rasteriser follows: outlining a code would fatten every module."""
+    filled = Document(
+        layers=[
+            Layer(
+                params=LaserParams(hatch_mm=2.0),
+                objects=[PathObject(path=Path.rect(0, 0, 10, 10), fill=True)],
+            )
+        ]
+    )
+    outlined = Document(
+        layers=[
+            Layer(
+                params=LaserParams(hatch_mm=2.0),
+                objects=[PathObject(path=Path.rect(0, 0, 10, 10), fill=True, stroke_width_mm=0.2)],
+            )
+        ]
+    )
+
+    assert all(len(line) == 2 for line in build_vector_job(filled, 0).polylines)
+    assert any(len(line) > 2 for line in build_vector_job(outlined, 0).polylines), "the outline is missing"
 
 
 def test_a_layer_with_nothing_vectorial_makes_no_job(png_bytes):

@@ -126,10 +126,10 @@ commands (MO and the Q-switch against FPK), not a different protocol.
 
 ## What is still missing
 
-* **Filled shapes come out hollow.** Hatching is not implemented, so `build_vector_job` burns the outline
-  and reports the fill in `VectorJob.skipped`. A QR code is unusable this way — it is all fill.
 * **Bitmaps cannot be marked at all.** A galvo has no raster format; marking an image means emitting it as
   a dot pattern, which nothing here does.
+* **Hatching runs one way only.** Filled shapes are swept with parallel lines (`pyrograph.hatch`), but
+  there is no cross-hatch and no offset between passes, so a second pass retraces the first.
 * **Nothing is verifiable without hardware.** Field calibration in particular is not something a mock can
   answer, and the mock cannot tell a sensible command list from a nonsensical one.
 * **Cloned boards cannot be initialised here.** Boards that report `0x9980` instead of `0x9899` need an

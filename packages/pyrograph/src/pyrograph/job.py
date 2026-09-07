@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from laserpecker.imaging import Raster, dither, pack_bits
 
 from .document import Document, ImageObject, LaserParams, Point, Rect, Transform
+from .hatch import hatch
 
 MM_PER_INCH = 25.4
 
@@ -188,12 +189,12 @@ def build_raster_job(
 def build_vector_job(document: Document, layer_index: int, steps: int = 16) -> VectorJob | None:
     """Flatten one layer to outlines. Returns ``None`` if the layer holds nothing a vector device can run.
 
-    Two things a document can express have no vector equivalent, and both are reported in
-    :attr:`VectorJob.skipped` rather than dropped in silence:
+    A filled shape is swept with hatch lines (:mod:`pyrograph.hatch`), because a vector machine cannot
+    darken an area — it can only run the spot across it. The outline is burnt as well where the object
+    has one.
 
-    * **A bitmap.** There is no outline to follow. Engraving it needs the raster path.
-    * **A filled shape.** The outline is burnt, but the area inside is not — filling needs hatching, which
-      is not implemented. A QR code would come out as hollow squares, so the caller has to be told.
+    One thing a document can express has no vector equivalent at all: a **bitmap**, which has no outline
+    to follow. It is named in :attr:`VectorJob.skipped` rather than dropped in silence.
     """
     layer = document.layers[layer_index]
     polylines: list[list[Point]] = []
@@ -207,9 +208,17 @@ def build_vector_job(document: Document, layer_index: int, steps: int = 16) -> V
         lines = obj.local_path().transformed(obj.transform).polylines(steps)
         if not lines:
             continue
-        if obj.fill:
-            skipped.append(f"{label} (fill, outline only)")
-        polylines.extend(lines)
+        filled = obj.fill and layer.params.hatch_mm > 0
+        if obj.fill and not filled:
+            # Hatching switched off leaves the shape hollow. Burning its outline is better than burning
+            # nothing at all, but it is not what the document says, so it is reported.
+            skipped.append(f"{label} (fill, outline only — hatch spacing is zero)")
+        if filled:
+            polylines.extend(hatch(lines, layer.params.hatch_mm, layer.params.hatch_angle))
+        if not filled or _stroke_width_mm(obj, layer) > 0:
+            # A hatched shape without a stroke of its own is not outlined, the same rule the rasteriser
+            # follows — otherwise every QR module grows by a line width.
+            polylines.extend(lines)
         box = obj.bounds() if box is None else box.union(obj.bounds())
 
     if not polylines or box is None:
