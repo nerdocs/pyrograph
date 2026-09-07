@@ -170,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     engrave.add_argument("--packed", action="store_true", help="send 1 bit per pixel")
     engrave.add_argument("--brightness", type=float, default=0.0, help="-100..100, applied before dithering")
     engrave.add_argument("--contrast", type=float, default=0.0, help="-100..100, applied before dithering")
-    engrave.add_argument("--name", default="pyrograph", help="job name stored on the device")
+    engrave.add_argument("--name", default="laserpecker", help="job name stored on the device")
     engrave.set_defaults(func=cmd_engrave)
 
     preview_dither = sub.add_parser("dither", help="write the dithered result as a PNG, without engraving")
